@@ -9,7 +9,11 @@
 - **軸4: コード調査の精度**(調査の**結論** — 最終的な回答が正解セットと一致するか)
 
 軸1・2は`bin/sweep.sh`が完全自動で測定します。軸3・4はClaude Code上で実際にコード調査
-タスクを解かせ、回答をブラインドな状態で記録した上で採点します。
+タスクを解かせ、回答をブラインドな状態で記録した上で採点します。**軸3の採点には
+ツール呼び出しの経過を記録したトレースファイル(`results/traces/<ブラインドID>.jsonl`)
+が必須です。** 最終回答テキスト(`results/answers/<ブラインドID>.md`)だけでは
+調査の過程を検証できず、`bin/run-tasks.sh`で測定し直さない限り軸3は「測定不能」
+としてスコアを付けられません。
 
 ## 前提
 
@@ -34,7 +38,7 @@ llm-bench/
 ├── bin/                    自動化スクリプト
 │   ├── prepare.sh          モデルの切り替え〜サーバー起動・検証
 │   ├── hide-answers.sh     正解セットをリポジトリ外へ物理的に退避/復元する
-│   ├── run-tasks.sh        軸3・4のタスクをfixture/で自動実行し回答を保存する
+│   ├── run-tasks.sh        軸3・4のタスクをfixture/で自動実行し回答とトレースを保存する
 │   ├── record.sh           軸3・4の回答をブラインドなファイル名で払い出す
 │   ├── score.sh            軸3・4のスコアをブラインドIDのまま記録する
 │   ├── restore.sh          検証環境の片付け
@@ -53,7 +57,9 @@ llm-bench/
 ├── answers/
 │   └── answers.md          正解セットと採点用の情報
 └── results/
-    └── .gitkeep            結果ファイル・回答・対応表・スコアの出力先(共有しない)
+    ├── .gitkeep            結果ファイル・回答・対応表・スコアの出力先(共有しない)
+    ├── answers/            軸3・4の最終回答テキスト(bin/run-tasks.shが生成。軸4採点用)
+    └── traces/             軸3・4のツール呼び出しイベントストリーム(bin/run-tasks.shが生成。軸3採点用)
 ```
 
 ### `answers/` と `tasks/` を `fixture/` の外に置いている理由
@@ -298,7 +304,7 @@ Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています
 自体をリポジトリ外の到達不可能な場所へ物理的に移動する**という方法で根本的に解決します。
 
 ```bash
-./bin/hide-answers.sh --hide      # answers/ を $TMPDIR 配下の固定パスへ退避する
+./bin/hide-answers.sh --hide      # answers/ を $HOME 配下の固定パスへ退避する
 ./bin/hide-answers.sh --status    # 退避中かどうかを確認する
 ./bin/hide-answers.sh --restore   # 退避先から元の位置へ戻す
 ```
@@ -339,7 +345,7 @@ Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています
 |---|---|
 | `bin/prepare.sh` | モデル名の解決・存在確認・`fixture/.claude/settings.json`のパッチ・`ollama serve`の起動・ウォームアップと検証(100% GPUか等)までを1コマンドで行う |
 | `bin/hide-answers.sh` | `answers/`をリポジトリ外の固定パスへ物理的に退避/復元する(`--hide` / `--restore` / `--status`) |
-| `bin/run-tasks.sh` | `fixture/`で現在のモデルにタスクを`claude -p`で無人実行させ、回答をブラインドIDのファイルとして自動保存する(退避されていなければエラーで停止する安全装置つき) |
+| `bin/run-tasks.sh` | `fixture/`で現在のモデルにタスクを`claude -p --output-format stream-json --verbose`で無人実行させ、最終回答を`results/answers/`へ、ツール呼び出しを含む全イベントを`results/traces/`へ、それぞれブラインドIDのファイルとして自動保存する(退避されていなければエラーで停止する安全装置つき) |
 | `bin/record.sh` | 現在のモデルを`fixture/.claude/settings.json`から自動で読み取り、軸3・4の回答をランダムなブラインドIDのファイルとして払い出す |
 | `bin/score.sh` | 軸3・4のスコアをブラインドIDのまま`results/scores.tsv`に記録する(`results/mapping.tsv`は参照しない) |
 | `bin/restore.sh` | `bin/prepare.sh`が起動した`ollama serve`を停止し、検証環境を片付ける |

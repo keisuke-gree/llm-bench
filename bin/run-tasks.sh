@@ -31,6 +31,11 @@ readonly SETTINGS_JSON="${FIXTURE_DIR}/.claude/settings.json"
 readonly TASKS_MD="${BENCH_ROOT}/tasks/tasks.md"
 readonly HIDE_ANSWERS_SH="${SCRIPT_DIR}/hide-answers.sh"
 readonly RECORD_SH="${SCRIPT_DIR}/record.sh"
+readonly RESULTS_DIR="${BENCH_ROOT}/results"
+# 軸3(調査の過程)採点用のイベントストリーム保存先。回答本文(results/answers/)とは
+# 別ディレクトリに分ける(軸4はanswers/の最終回答テキストのみを、軸3はtraces/の
+# ツール呼び出しを含む全イベントを参照する、という採点フェーズでの参照先の違いに対応させるため)。
+readonly TRACES_DIR="${RESULTS_DIR}/traces"
 
 readonly DEFAULT_TIMEOUT_SEC=900
 
@@ -131,6 +136,34 @@ parse_record_field() {
   echo "${output}" | sed -n "s/^ *${label}: *//p" | head -n1
 }
 
+# `claude -p ... --output-format stream-json --verbose` の出力(JSONLのイベント
+# ストリーム)から、最終回答テキストを抽出する。
+#
+# 抽出元: `type == "result"` のイベントが持つ `.result` フィールド。実機で
+# 動作確認した結果、成功時("subtype":"success")・失敗時(APIエラー等で
+# "is_error":true)のいずれでも、そのターンの最終テキストが`.result`に
+# 入ることを確認済み(`--output-format text`時の標準出力と等価な内容)。
+# 1セッション1回のみ出現する想定だが、念のため最後の1件を採用する。
+#
+# 抽出できた場合は標準出力へ書いて0を返す。抽出できなかった場合(将来の
+# バージョンで出力仕様が変わった等)は何も書かずに1を返す。呼び出し側は
+# 「抽出失敗」を明示的な診断メッセージとして回答ファイルに残すこと
+# (抽出できなかったことを隠して黙って空の回答を保存してはいけない)。
+extract_final_answer() {
+  local stream_file="$1"
+  local answer
+  answer="$(jq -rs '
+    [.[] | select(.type == "result")] as $results
+    | if ($results | length) > 0 then ($results[-1].result // "") else "" end
+  ' "${stream_file}" 2>/dev/null || true)"
+
+  if [[ -z "${answer}" || "${answer}" == "null" ]]; then
+    return 1
+  fi
+  printf '%s' "${answer}"
+  return 0
+}
+
 # ============================================================
 # タスク実行本体
 # ============================================================
@@ -167,7 +200,14 @@ run_one_task() {
   fi
   echo "  ブラインドID: ${blind_id}" >&2
 
+  # 軸3(調査の過程)採点用のトレースファイル。回答ファイル(answer_file)とは別に
+  # 同じブラインドIDで保存する(モデル名は書き込まない)。
+  local trace_file="${TRACES_DIR}/${blind_id}.jsonl"
+
   # --- 2. claude -p でタスクを実行する(所要時間を計測) ---
+  # --output-format stream-json --verbose: 最終出力だけでなくツール呼び出しを
+  # 含む全イベントを取得するために付与している(--print使用時、stream-jsonは
+  # --verboseとの併用が必須。`claude -p --help`で確認済み)。
   local out_tmp err_tmp start_ts end_ts elapsed rc
   out_tmp="$(mktemp "${TMPDIR:-/tmp}/run_tasks_out.XXXXXX")"
   err_tmp="$(mktemp "${TMPDIR:-/tmp}/run_tasks_err.XXXXXX")"
@@ -175,11 +215,17 @@ run_one_task() {
   start_ts="$(date +%s)"
   rc=0
   run_with_timeout "${timeout_sec}" \
-    bash -c 'cd "$1" || exit 1; exec claude -p "$2" --setting-sources project' \
+    bash -c 'cd "$1" || exit 1; exec claude -p "$2" --setting-sources project --output-format stream-json --verbose' \
     _ "${FIXTURE_DIR}" "${task_body}" \
     >"${out_tmp}" 2>"${err_tmp}" || rc=$?
   end_ts="$(date +%s)"
   elapsed=$((end_ts - start_ts))
+
+  # イベントストリームは成功・失敗・タイムアウトを問わず保存する(タイムアウトに
+  # 至る過程の記録も軸3の判断材料になり得るため)。強制終了で不完全なJSONLに
+  # なる場合があるが、それも「途中で行き詰まった過程の証拠」として残す。
+  mkdir -p "${TRACES_DIR}"
+  cp "${out_tmp}" "${trace_file}"
 
   local status
   if [ "${rc}" -eq 124 ]; then
@@ -206,13 +252,22 @@ run_one_task() {
     } > "${answer_file}"
   else
     status="成功"
-    echo "  結果: ${status}(${elapsed}秒)" >&2
+    local final_answer
+    if final_answer="$(extract_final_answer "${out_tmp}")"; then
+      echo "  結果: ${status}(${elapsed}秒)" >&2
+    else
+      status="成功(回答抽出エラー)"
+      echo "  結果: ${status}(${elapsed}秒)" >&2
+      echo "  警告: stream-json出力から最終回答を抽出できませんでした。" >&2
+      echo "        results/traces/${blind_id}.jsonl を確認してください。" >&2
+      final_answer="(回答抽出エラー: stream-json出力の type==\"result\" イベントから最終回答を抽出できませんでした。results/traces/${blind_id}.jsonl の生ログを確認してください)"
+    fi
     {
       echo "# タスク${task_no}"
       echo ""
       echo "所要時間: ${elapsed}秒"
       echo ""
-      cat "${out_tmp}"
+      echo "${final_answer}"
     } > "${answer_file}"
   fi
 
@@ -234,6 +289,11 @@ print_usage() {
   fixture/ で現在設定されているモデルにタスクを解かせ、回答をブラインドIDの
   ファイルとして results/answers/ 配下に保存します。record.sh でのブラインドID
   払い出しから claude -p での実行、回答の保存までを自動化します。
+
+  claude -p は --output-format stream-json --verbose で実行し、最終回答
+  だけでなくツール呼び出しを含む全イベントを results/traces/<ブラインドID>.jsonl
+  へ保存します(軸3「調査の過程」の採点用)。results/answers/<ブラインドID>.md
+  には従来通り最終回答テキストのみを保存します(軸4の採点用)。
 
   安全装置: answers/ が bin/hide-answers.sh --hide で退避されていない場合、
   測定を汚染する前にエラーで停止します。

@@ -1,0 +1,643 @@
+<title>gemma4:26b 単独再測定（再現性の確認）</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e0e0e0;
+    --accent: #1a5fb4;
+    --win-bg: #e8f5e9;
+    --win-fg: #1b5e20;
+    --lose-bg: #fdecea;
+    --lose-fg: #8b1a10;
+    --warn-bg: #fff8e1;
+    --warn-fg: #7a5300;
+    --code-bg: #f5f5f5;
+    --th-bg: #f0f0f0;
+    --tip-bg: #2b2b2b;
+    --tip-fg: #ffffff;
+    --tip-border: #2b2b2b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a;
+      --fg: #e6e6e6;
+      --muted: #9aa0a6;
+      --border: #2c3038;
+      --accent: #78aeff;
+      --win-bg: #1b3a22;
+      --win-fg: #a5e0b0;
+      --lose-bg: #3d1f1c;
+      --lose-fg: #f0a99f;
+      --warn-bg: #3a2f14;
+      --warn-fg: #e8cf8f;
+      --code-bg: #1c1f25;
+      --th-bg: #1f232a;
+      --tip-bg: #e6e6e6;
+      --tip-fg: #14161a;
+      --tip-border: #e6e6e6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a;
+    --fg: #e6e6e6;
+    --muted: #9aa0a6;
+    --border: #2c3038;
+    --accent: #78aeff;
+    --win-bg: #1b3a22;
+    --win-fg: #a5e0b0;
+    --lose-bg: #3d1f1c;
+    --lose-fg: #f0a99f;
+    --warn-bg: #3a2f14;
+    --warn-fg: #e8cf8f;
+    --code-bg: #1c1f25;
+    --th-bg: #1f232a;
+    --tip-bg: #e6e6e6;
+    --tip-fg: #14161a;
+    --tip-border: #e6e6e6;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    line-height: 1.75;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 5rem;
+    font-size: 15px;
+  }
+  h1 { font-size: 1.8rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 3rem 0 1rem;
+    padding-bottom: .4rem;
+    border-bottom: 2px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  .meta { color: var(--muted); font-size: .85rem; margin-bottom: 2.5rem; }
+  p { margin: .8rem 0; }
+
+  .verdict {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    background: var(--code-bg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+  }
+  .verdict h2 { margin: 0 0 .6rem; border: none; padding: 0; font-size: 1.15rem; }
+  .verdict strong { color: var(--accent); }
+
+  .scroll { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td {
+    border: 1px solid var(--border);
+    padding: .5rem .7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--th-bg); font-weight: 600; white-space: nowrap; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .win { background: var(--win-bg); color: var(--win-fg); font-weight: 600; }
+  .lose { background: var(--lose-bg); color: var(--lose-fg); }
+  .warn { background: var(--warn-bg); color: var(--warn-fg); }
+  caption { caption-side: bottom; color: var(--muted); font-size: .8rem; padding-top: .5rem; text-align: left; }
+
+  code {
+    background: var(--code-bg);
+    padding: .12em .4em;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .88em;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: .9rem 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .35rem 0; }
+  .note { color: var(--muted); font-size: .88rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* 用語ツールチップ（本文中の用語向け。表セルはtitle属性を使うためここでは対象外） */
+  .t {
+    border-bottom: 1px dotted var(--muted);
+    cursor: help;
+    position: relative;
+  }
+  .t:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  .t::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: 125%;
+    transform: translate(-50%, -4px);
+    width: max-content;
+    max-width: 320px;
+    background: var(--tip-bg);
+    color: var(--tip-fg);
+    border: 1px solid var(--tip-border);
+    padding: .55rem .75rem;
+    border-radius: 6px;
+    font-size: .82rem;
+    line-height: 1.5;
+    white-space: normal;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .12s ease;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .t:hover::after,
+  .t:focus::after {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .8rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  details dl { margin: 1rem 0 .2rem; }
+  details dt { font-weight: 600; margin-top: .9rem; }
+  details dt:first-child { margin-top: 0; }
+  details dd { margin: .2rem 0 0; color: var(--fg); }
+</style>
+
+<h1>gemma4:26b 単独再測定（再現性の確認）</h1>
+<p class="meta">
+  対象: <code>gemma4:26b</code><br>
+  測定日: 2026-08-27 ／ 環境: Apple M5 Max（<span class="t" data-tip="GPUが使えるメモリ。Apple Siliconでは本体メモリと共有され、この環境では実測28.1 GiBが上限。" tabindex="0">VRAM</span>実測 28.1 GiB）+ Ollama + Claude Code
+</p>
+
+<div class="verdict">
+  <h2>結論</h2>
+  <p><strong><code>gemma4:26b</code> を本番モデルとする判断は維持できる。</strong> 2026-08-26〜27 の3モデル比較で得たスコアが、独立した再測定でほぼ完全に再現した。</p>
+  <p>
+    軸3（調査の過程）<strong>15/15</strong>、軸4（結論の正しさ）<strong>14/15</strong> は前回と同一。
+    3タスクの合計所要時間も <strong>4分40秒</strong>（前回 4分43秒、差 −1%）で一致した。
+    <span class="t" data-tip="ベンチマークで意図的に仕込んだ「正解に見えるが正解ではないもの」。判別能力を測るための罠。" tabindex="0">デコイ</span>のうち唯一取りこぼした
+    <code>CampaignEntryModel.php</code> まで前回と同じであり、失われた1点は偶然のばらつきではなく
+    <strong>このモデルの再現する弱点</strong>である。
+  </p>
+  <p>
+    ただし <span class="t" data-tip="モデルが出力を生成する速度（1秒あたりのトークン数）。eval count ÷ eval duration で求まる。入力を読む速度とは別物で、体感速度を支配するのはこちら。" tabindex="0">eval rate</span> が +2.5%（76.07 → 78.00 <span class="t" data-tip="tokens per second。1秒あたりに生成できるトークン数。" tabindex="0">tok/s</span>）改善したにもかかわらず、
+    <span class="t" data-tip="モデルが生成した出力のトークン数。実際の待ち時間は eval count ÷ eval rate で決まるため、速度だけ見ても待ち時間は分からない。" tabindex="0">eval count</span> が +16%（2229 → 2585）増えたため、
+    固定プロンプトの待ち時間は <strong>+13% 悪化</strong>している（29.3 → 33.14秒）。速度指標だけを見て「改善した」と読んではいけない。
+  </p>
+</div>
+
+<details>
+  <summary>用語集（クリックで展開）</summary>
+  <dl>
+    <dt>eval rate</dt>
+    <dd>モデルが出力を生成する速度（1秒あたりのトークン数）。eval count ÷ eval duration で求まる。入力を読む速度とは別物で、体感速度を支配するのはこちら。</dd>
+    <dt>eval count</dt>
+    <dd>モデルが生成した出力のトークン数。実際の待ち時間は eval count ÷ eval rate で決まるため、速度だけ見ても待ち時間は分からない。</dd>
+    <dt>prompt eval rate</dt>
+    <dd>入力（プロンプト）を読み込む速度。全トークンを並列に処理できるため eval rate より速い。</dd>
+    <dt>トークン</dt>
+    <dd>モデルが文章を扱う最小単位。日本語なら1〜2文字、英語なら単語の一部程度に相当する。</dd>
+    <dt>tok/s</dt>
+    <dd>tokens per second。1秒あたりに生成できるトークン数。</dd>
+    <dt>コンテキスト長</dt>
+    <dd>モデルが一度に扱える入力と出力の合計トークン数の上限。これを超えると古い内容が失われる。</dd>
+    <dt>KVキャッシュ</dt>
+    <dd>生成の途中結果を保持するメモリ領域。コンテキストが長いほど大きくなり、VRAMを消費する。</dd>
+    <dt>VRAM</dt>
+    <dd>GPUが使えるメモリ。Apple Siliconでは本体メモリと共有される。</dd>
+    <dt>PROCESSOR</dt>
+    <dd>ollama ps が表示する列で、モデルがGPUとCPUのどちらで動いているかの比率。100% GPU が理想的な状態。</dd>
+    <dt>SIZE</dt>
+    <dd>ollama ps が表示する列で、そのモデルがメモリ上で占める大きさ。モデルの重みとKVキャッシュの合計。</dd>
+    <dt>CPU溢れ</dt>
+    <dd>モデルがVRAMに収まらず一部がCPU側で処理されること。オフロードとも呼び、速度が激減する。</dd>
+    <dt>MoE</dt>
+    <dd>Mixture-of-Experts。モデル内部を複数の「専門家」に分け、1トークンごとに一部だけを使う構造。総パラメータが大きくても計算量が少なく高速。</dd>
+    <dt>dense</dt>
+    <dd>MoEと対になる構造で、1トークンごとに全パラメータを使う。同じサイズならMoEより遅くなる。</dd>
+    <dt>メモリ帯域</dt>
+    <dd>メモリからデータを読み出せる速さ（GB/s）。denseモデルの速度上限を決める物理的な制約。</dd>
+    <dt>量子化</dt>
+    <dd>モデルの重みを低い精度に圧縮してサイズを小さくする技術。</dd>
+    <dt>thinkingモード</dt>
+    <dd>回答の前に思考過程を生成するモデルの動作。精度が上がることがあるが生成トークンが増えて時間がかかる。</dd>
+    <dt>auto-compact</dt>
+    <dd>会話がコンテキスト長の上限に近づいた際、Claude Codeが自動で要約して圧縮する機能。</dd>
+    <dt>デコイ</dt>
+    <dd>ベンチマークで意図的に仕込んだ「正解に見えるが正解ではないもの」。判別能力を測るための罠。</dd>
+    <dt>幻覚</dt>
+    <dd>hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。</dd>
+    <dt>学習データ汚染</dt>
+    <dd>評価に使うコードがモデルの学習データに含まれており、実際には調査せず記憶で答えられてしまう問題。</dd>
+    <dt>rg</dt>
+    <dd>ripgrep。高速な文字列検索コマンド。</dd>
+    <dt>fd</dt>
+    <dd>高速なファイル探索コマンド。</dd>
+    <dt>テンプレートトークン</dt>
+    <dd>モデルが内部的に使う制御記号。出力に漏れると表示が壊れたり、ツール呼び出しが失敗する。</dd>
+    <dt>ブラインド採点</dt>
+    <dd>回答をブラインドID（<code>answer-32</code> 等）に置き換え、どのモデルの回答か分からない状態で採点する方式。採点者の先入観を排除するために使う。</dd>
+    <dt>Recall</dt>
+    <dd>正解セットのうち何件を回答に挙げられたかの割合。見落としの少なさを表す。</dd>
+    <dt>誤検出</dt>
+    <dd>False Positive。正解セットに含まれない項目を誤って回答に含めてしまうこと。Recallとは必ず別に数える。</dd>
+    <dt>型エラー</dt>
+    <dd>TypeError。宣言された型と異なる型の値を渡したときにPHPが発生させるエラー。</dd>
+    <dt>文字列補間</dt>
+    <dd><code>"文字列{$変数}"</code> のように文字列の中に変数を埋め込む書き方。どんな型でも文字列に変換されるため型エラーにならない。</dd>
+    <dt>名前付き引数</dt>
+    <dd><code>campaignId: 101</code> のように引数名を明示して渡すPHPの書き方。単純な検索では見つけにくい。</dd>
+  </dl>
+</details>
+
+<h2>1. 検証の設計</h2>
+
+<p>
+  この再測定の目的は、モデルの優劣を新たに決めることではなく、<strong>2026-08-26〜27 の3モデル比較で
+  <code>gemma4:26b</code> に付いたスコアが再現するかを確かめること</strong>である。ベンチマーク一式は
+  <code>.claude/skills/benchmark-run</code> Skill によって自動実行され、人間の介入は
+  <code>ollama pull</code> の確認のみとした。
+</p>
+
+<p>4つの軸を次のように測っている。</p>
+
+<ul>
+  <li><strong>軸1（生成速度）</strong> — 固定プロンプトを4回実行し、1回目（モデルロード直後で不公平）を破棄した3回の eval rate と eval count の平均。</li>
+  <li><strong>軸2（実用<span class="t" data-tip="モデルが一度に扱える入力と出力の合計トークン数の上限。これを超えると古い内容が失われる。" tabindex="0">コンテキスト長</span>上限）</strong> — 32768 / 65536 / 131072 / 262144 の4段階でサーバーを起動し直し、<span class="t" data-tip="ollama ps が表示する列で、モデルがGPUとCPUのどちらで動いているかの比率。100% GPU が理想的な状態。" tabindex="0">PROCESSOR</span> が <code>100% GPU</code> を維持できる最大値を探す。</li>
+  <li><strong>軸3（調査の過程）</strong> — ツール選択2点 / 構文エラーなし1点 / <span class="t" data-tip="hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。" tabindex="0">幻覚</span>なし1点 / 完結性1点の5点満点。</li>
+  <li><strong>軸4（結論の正しさ）</strong> — 最終回答と正解セットの一致度。<span class="t" data-tip="正解セットのうち何件を回答に挙げられたかの割合。見落としの少なさを表す。" tabindex="0">Recall</span> と<span class="t" data-tip="False Positive。正解セットに含まれない項目を誤って回答に含めてしまうこと。Recallとは必ず別に数える。" tabindex="0">誤検出</span>を必ず別々に数える。</li>
+</ul>
+
+<p>
+  対象コードベースは <code>fixture/</code>（PHP合成コード90ファイル）である。実在のOSSを使うと
+  <span class="t" data-tip="評価に使うコードがモデルの学習データに含まれており、実際には調査せず記憶で答えられてしまう問題。" tabindex="0">学習データ汚染</span>で「調査せず記憶で答える」ことが可能になるため、合成コードにしている。
+  正解セット（<code>answers/</code>）は測定中リポジトリ外へ物理的に退避し、モデルから到達不可能にした。
+  採点は<span class="t" data-tip="回答をブラインドID（answer-32 等）に置き換え、どのモデルの回答か分からない状態で採点する方式。採点者の先入観を排除するために使う。" tabindex="0">ブラインド採点</span>で行い、モデル名の解決はこのレポート作成時点まで行っていない。
+</p>
+
+<h3>タスクの内容</h3>
+<ol>
+  <li><strong>呼び出し元の列挙</strong> — <code>Bench\Logic\RewardCalculator::applyBonusRate()</code> の呼び出し箇所をすべて特定する。同名メソッドを持つ別クラス <code>LegacyRewardCalculator</code>（3ファイル）、PHPDocの <code>@see</code> 内の文字列1件、ログイベント名の文字列リテラル1件がデコイ。正解は6ファイル。</li>
+  <li><strong>型変更の影響範囲</strong> — <code>UserContext::$campaignId</code> を <code>?int</code> から <code>string</code> に変えたと仮定し、型エラーまたは明らかな不正動作になるファイルを特定する。<code>campaignId</code> を含む12ファイルのうち、<span class="t" data-tip='"文字列{$変数}" のように文字列の中に変数を埋め込む書き方。どんな型でも文字列に変換されるため型エラーにならない。' tabindex="0">文字列補間</span>のみの参照2件、<code>mixed</code> 引数へ渡すだけの1件、<code>UserContext</code> を参照していない1件がデコイ。正解は7ファイル。</li>
+  <li><strong>テスト失敗の原因特定</strong> — <code>testBonusAppliedOnCampaignLastDay()</code> の失敗原因を、コードを読んで呼び出し連鎖を追って特定する。正しく実装された同名メソッドを持つ <code>EventPeriodChecker</code> と、無関係なTODOコメントを持つ <code>RankingResetChecker</code> がデコイ。</li>
+</ol>
+
+<h2>2. 軸3・4: スコアと考察</h2>
+
+<p>
+  3タスクすべてが完走し、<strong>軸3は満点、軸4は15点中14点</strong>となった。2026-08-26〜27 の測定と
+  完全に同じスコアである。
+</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr>
+      <th>タスク</th>
+      <th colspan="2">2026-08-27 再測定</th>
+      <th colspan="2">2026-08-26〜27 前回測定</th>
+      <th>差分</th>
+    </tr>
+    <tr>
+      <th></th>
+      <th>軸3</th><th>軸4</th>
+      <th>軸3</th><th>軸4</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>1. 呼び出し元の列挙<br><span class="note">(<code>answer-32</code>)</span></td>
+      <td class="num win">5/5</td><td class="num win">5/5</td>
+      <td class="num">5/5</td><td class="num">5/5</td>
+      <td>一致</td></tr>
+    <tr><td>2. 型変更の影響範囲<br><span class="note">(<code>answer-11</code>)</span></td>
+      <td class="num win">5/5</td><td class="num warn">4/5</td>
+      <td class="num">5/5</td><td class="num">4/5</td>
+      <td>一致（<span title="False Positive。正解セットに含まれない項目を誤って回答に含めてしまうこと。">誤検出</span>したファイルまで同一）</td></tr>
+    <tr><td>3. テスト失敗の原因特定<br><span class="note">(<code>answer-87</code>)</span></td>
+      <td class="num win">5/5</td><td class="num win">5/5</td>
+      <td class="num">5/5</td><td class="num">5/5</td>
+      <td>一致</td></tr>
+    <tr>
+      <td><strong>合計</strong></td>
+      <td class="num win"><strong>15/15</strong></td><td class="num win"><strong>14/15</strong></td>
+      <td class="num"><strong>15/15</strong></td><td class="num"><strong>14/15</strong></td>
+      <td><strong>一致</strong></td></tr>
+  </tbody>
+  <caption>軸3 = 調査の過程（ツール選択2点 / 構文エラーなし1点 / <span title="hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。">幻覚</span>なし1点 / 完結性1点）、軸4 = 最終回答と正解セットの一致度。ブラインドIDは <code>results/mapping.tsv</code> により解決した</caption>
+</table>
+</div>
+
+<h3>失点の内訳: 同じデコイで同じ間違いをした</h3>
+
+<p>
+  唯一の失点はタスク2の誤検出1件で、内容も前回と同一だった。
+</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>タスク</th><th class="num">正解数</th><th class="num">見落とし</th><th class="num">誤検出</th><th>誤検出の内容</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>1. 呼び出し元の列挙</td>
+      <td class="num win">6 / 6</td><td class="num win">0</td><td class="num win">0</td>
+      <td>—（<code>LegacyRewardCalculator</code> の3件、コメント1件、文字列リテラル1件をすべて除外）</td>
+    </tr>
+    <tr>
+      <td>2. 型変更の影響範囲</td>
+      <td class="num win">7 / 7</td><td class="num win">0</td><td class="num warn">1</td>
+      <td><code>src/Model/CampaignEntryModel.php</code>。宣言箇所とエラー発生箇所の混同</td>
+    </tr>
+    <tr>
+      <td>3. テスト失敗の原因特定</td>
+      <td class="num win">1 / 1</td><td class="num win">0</td><td class="num win">0</td>
+      <td>—（<code>EventPeriodChecker</code> / <code>RankingResetChecker</code> に惑わされていない）</td>
+    </tr>
+  </tbody>
+  <caption>Recallと誤検出は必ず別に数える。タスク2の誤検出ファイルは前回測定と同一</caption>
+</table>
+</div>
+
+<p>
+  <code>CampaignEntryModel.php</code> はコンストラクタに <code>private int $campaignId</code> を持つが、
+  <code>UserContext</code> を <code>use</code> すらしておらず <code>$context-&gt;campaignId</code> を参照するコードは一切ない。
+  型変更が実際にエラーとして表面化するのは呼び出し元の <code>CampaignController.php</code>（これは正解として挙げられている）で、
+  <code>CampaignEntryModel.php</code> 自身のコードは変更前後で完全に同一のまま動作する。
+</p>
+
+<p>
+  つまりこのモデルは<strong>「同じ型宣言を持つファイル」と「その型宣言が壊れるファイル」の区別が付いていない</strong>。
+  2回の独立した測定で同じファイルを同じ理由で誤検出したことから、これは一過性のばらつきではなく
+  <strong>再現する判断上の癖</strong>と扱うべきである。影響範囲調査を任せる場合、
+  「宣言箇所そのものを影響先として挙げていないか」は人間側で確認する価値がある。
+</p>
+
+<h3>正解できた方の内容: <span class="t" data-tip="ripgrep。高速な文字列検索コマンド。" tabindex="0">rg</span> の一致では届かない2箇所を拾えている</h3>
+
+<p>失点1件を除けば、単純な文字列検索では届かない箇所を的確に拾っている。</p>
+
+<ul>
+  <li>
+    <strong>タスク1</strong>: <code>src/Model/UserRewardModel.php</code> の1件は
+    <code>$calculator = new RewardCalculator();</code> と宣言してから離れた行で
+    <code>$calculator-&gt;applyBonusRate(...)</code> を呼ぶ形であり、
+    <code>-&gt;rewardCalculator-&gt;applyBonusRate(</code> のようなパターン一致では見つからない。データフローを追えている証拠になる。
+  </li>
+  <li>
+    <strong>タスク2</strong>: テスト2ファイルは <code>campaignId: 1</code> のような<span class="t" data-tip="campaignId: 101 のように引数名を明示して渡すPHPの書き方。単純な検索では見つけにくい。" tabindex="0">名前付き引数</span>で
+    <code>UserContext</code> を構築している。<code>$context-&gt;campaignId</code> というパターンではこの形にマッチしないが、両方とも挙げられている。
+  </li>
+  <li>
+    <strong>タスク2</strong>: <code>QuestClearLogic.php</code> の <code>$context-&gt;campaignId === self::SUMMER_CAMPAIGN_ID</code> について、
+    <strong><span class="t" data-tip="TypeError。宣言された型と異なる型の値を渡したときにPHPが発生させるエラー。" tabindex="0">型エラー</span>ではなく「常に <code>false</code> になり分岐に入らない」と正しく説明している。</strong>
+    正解セットはここを <code>TypeError</code> と誤説明した場合の減点対象として明示していたが、該当しなかった。
+  </li>
+  <li>
+    <strong>タスク3</strong>: 原因ファイル・メソッド・行番号（33行目）・条件式（<code>$now &lt; $endAt</code>）まで正確で、
+    呼び出し連鎖4段（テスト → <code>QuestClearLogic::clear()</code> → <code>RewardCalculator::applyBonusRate()</code> →
+    <code>CampaignPeriodChecker::isWithinPeriod()</code>）を引数付きで示している。
+    <code>fixture/</code> の実物と照合して全て一致することを確認した。
+  </li>
+</ul>
+
+<p class="note">
+  回答に含まれるファイルパス・行番号・メソッドシグネチャは、採点時に <code>fixture/</code> の実物と1件ずつ照合した。
+  <span class="t" data-tip="hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。" tabindex="0">幻覚</span>は1件も無い。
+  <span class="t" data-tip="モデルが内部的に使う制御記号。出力に漏れると表示が壊れたり、ツール呼び出しが失敗する。" tabindex="0">テンプレートトークン</span>の漏れも3ファイルすべてで観測されなかった（前回測定では <code>&lt;channel|&gt;</code> の混入が観測されている。実害はなかったが、今回は再現していない）。
+</p>
+
+<h3>軸3と軸4の乖離: 過程の質は易しい問題では見えない</h3>
+
+<p class="note">
+  タスク1と3は「検索とコード読解が正しくできれば正解にたどり着く」問題であり、軸3が満点なら軸4も満点になる。
+  差が出るのはタスク2だけである。タスク2は12ファイルを1件ずつ「影響を受けるか」と判定する問題で、
+  <strong>検索の正確さ（軸3）ではなく判定の積み重ね（軸4）を測っている</strong>。今回もここだけで軸3=5、軸4=4 の乖離が生じた。
+  この構造は前回測定でも同じで、当時 <code>qwen3-coder:30b</code> が軸4=2/5 まで崩れたのもタスク2だった。
+  <strong>軸3が満点でも軸4の満点は保証されない</strong>——過程の規律と判断の精度は別の能力であり、
+  易しいタスクだけを回している限りこの差は表に出てこない。
+</p>
+
+<h2>3. 所要時間</h2>
+
+<p>
+  3タスクの合計は <strong>4分40秒</strong>（280秒）で、前回の 4分43秒（283秒）と実質同一だった。
+  一方でタスク単位のばらつきは合計より大きく、タスク2は +19秒（+20%）、タスク3は −15秒（−18%）動いている。
+  <strong>合計値は安定しているが、個別タスクの秒数を1回の測定で比較してはいけない。</strong>
+</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>タスク</th><th class="num">2026-08-27 再測定</th><th class="num">2026-08-26〜27 前回測定</th><th class="num">差分</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1. 呼び出し元の列挙</td><td class="num">1分38秒</td><td class="num">1分45秒</td><td class="num">−7秒</td></tr>
+    <tr><td>2. 型変更の影響範囲</td><td class="num">1分54秒</td><td class="num">1分35秒</td><td class="num warn">+19秒</td></tr>
+    <tr><td>3. テスト失敗の原因特定</td><td class="num">1分08秒</td><td class="num">1分23秒</td><td class="num">−15秒</td></tr>
+    <tr><td><strong>3タスク合計</strong></td><td class="num"><strong>4分40秒</strong></td><td class="num"><strong>4分43秒</strong></td><td class="num"><strong>−3秒</strong></td></tr>
+  </tbody>
+  <caption>いずれも <code>bin/run-tasks.sh</code> が計測した実所要時間（<code>claude -p</code> の起動から終了まで）</caption>
+</table>
+</div>
+
+<h3>eval rate は改善、体感の待ち時間は悪化</h3>
+
+<p>
+  固定プロンプト（PHPのバリデータクラスを1つ書かせる）での待ち時間を、eval count ÷ eval rate で算出する。
+  <strong>eval rate だけを見ると判断を誤る</strong>ことが今回もそのまま当てはまった。
+</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>コンテキスト長</th><th class="num">生成トークン数<br>(eval count)</th><th class="num">eval rate<br>(tok/s)</th><th class="num">実際の待ち時間<br>(秒)</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">32768</td><td class="num">2551</td><td class="num win">82.04</td><td class="num">31.09</td></tr>
+    <tr><td class="num">65536</td><td class="num win">2288</td><td class="num">79.55</td><td class="num win">28.76</td></tr>
+    <tr><td class="num">131072</td><td class="num">2509</td><td class="num">78.27</td><td class="num">32.06</td></tr>
+    <tr><td class="num">262144</td><td class="num">2585</td><td class="num">78.00</td><td class="num warn">33.14</td></tr>
+    <tr><td colspan="4" style="border:none"></td></tr>
+    <tr><td class="num">262144<br><span class="note">前回測定</span></td><td class="num">2229</td><td class="num">76.07</td><td class="num">29.30</td></tr>
+  </tbody>
+  <caption>待ち時間 = 生成トークン数 ÷ eval rate。運用コンテキスト長 262144 では速度が +2.5%（76.07 → 78.00）改善したのに、生成量が +16%（2229 → 2585）増えたため待ち時間は +13%（29.30 → 33.14秒）悪化している</caption>
+</table>
+</div>
+
+<p>
+  この非対称性は、同一モデルの再測定という最も条件の揃った比較でも成立した。
+  <strong>速度指標の改善を体感の改善と読み替えてはならない。</strong>
+  一方でエージェント用途の実所要時間（4分40秒 対 4分43秒）は生成量の +16% にほとんど反応していない。
+  固定プロンプト1発の生成量は、多段のツール呼び出しを伴う実タスクの所要時間を予測しない。
+</p>
+
+<h2>4. 軸1・2: 測定値</h2>
+
+<p>
+  <strong>4段階すべてで <code>100% GPU</code> を維持し、<span class="t" data-tip="ollama ps が表示する列で、そのモデルがメモリ上で占める大きさ。モデルの重みとKVキャッシュの合計。" tabindex="0">SIZE</span> は17GBのまま変化しなかった。</strong>
+  コンテキスト長を8倍（32768 → 262144）にしても<span class="t" data-tip="生成の途中結果を保持するメモリ領域。コンテキストが長いほど大きくなり、VRAMを消費する。" tabindex="0">KVキャッシュ</span>由来のSIZE増加が
+  <code>ollama ps</code> の表示精度（1GB刻み）に現れないほど小さく、<span class="t" data-tip="モデルがVRAMに収まらず一部がCPU側で処理されること。オフロードとも呼び、速度が激減する。" tabindex="0">CPU溢れ</span>は一度も発生していない。
+  速度低下も 82.04 → 78.00 tok/s（−4.9%）に収まっている。
+</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>モデル</th><th>32768</th><th>65536</th><th>131072</th><th>262144</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>gemma4:26b</code></td>
+      <td class="win">100% GPU / 17 GB<br>82.04 tok/s / 2551 tok</td>
+      <td class="win">100% GPU / 17 GB<br>79.55 tok/s / 2288 tok</td>
+      <td class="win">100% GPU / 17 GB<br>78.27 tok/s / 2509 tok</td>
+      <td class="win">100% GPU / 17 GB<br>78.00 tok/s / 2585 tok</td>
+    </tr>
+  </tbody>
+  <caption>各セルは <span title="ollama ps が表示する列で、モデルがGPUとCPUのどちらで動いているかの比率。100% GPU が理想的な状態。">PROCESSOR</span> / SIZE / tok/s / 生成トークン数。測定失敗は0件。コンテキスト長ごとに <code>OLLAMA_CONTEXT_LENGTH</code> を変えてサーバーを起動し直し、各組4回実行して1回目を破棄した3回の平均</caption>
+</table>
+</div>
+
+<p>
+  軸2の結論として、<strong>実用上のコンテキスト上限は測定した最大値 262144 に達しても見つからなかった</strong>。
+  17GBというSIZEは28.1 GiBのVRAMに対して11GB程度の余裕を残しており、他のモデル（例えば埋め込み用の
+  <code>nomic-embed-text</code>、274MB）を同時に載せる構成も取れる。
+</p>
+
+<h2>5. 付随的に判明した技術的事実</h2>
+
+<h3>アーキテクチャの推定（メモリ帯域からの逆算）</h3>
+
+<p>
+  <span class="t" data-tip="MoEと対になる構造で、1トークンごとに全パラメータを使う。同じサイズならMoEより遅くなる。" tabindex="0">dense</span>モデルは1トークン生成するごとに全重みをメモリから読むため、速度上限は
+  「<span class="t" data-tip="メモリからデータを読み出せる速さ（GB/s）。denseモデルの速度上限を決める物理的な制約。" tabindex="0">メモリ帯域</span> ÷ モデルサイズ」で決まる。
+  逆算して <code>SIZE × tok/s</code> を計算し、M5 Maxの実効帯域（500〜600 GB/s程度）と比較する。
+</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>コンテキスト長</th><th class="num">SIZE × tok/s</th><th class="num">要求メモリ帯域</th><th class="num">実効帯域比</th><th>判定</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">32768</td><td class="num">17GB × 82.04</td><td class="num">約 1,395 GB/s</td><td class="num">2.3〜2.8倍</td><td>物理的に不可能 → <strong><span title="Mixture-of-Experts。モデル内部を複数の「専門家」に分け、1トークンごとに一部だけを使う構造。総パラメータが大きくても計算量が少なく高速。">MoE</span>（疎）</strong></td></tr>
+    <tr><td class="num">65536</td><td class="num">17GB × 79.55</td><td class="num">約 1,352 GB/s</td><td class="num">2.3〜2.7倍</td><td>同上 → <strong>MoE（疎）</strong></td></tr>
+    <tr><td class="num">131072</td><td class="num">17GB × 78.27</td><td class="num">約 1,331 GB/s</td><td class="num">2.2〜2.7倍</td><td>同上 → <strong>MoE（疎）</strong></td></tr>
+    <tr><td class="num">262144</td><td class="num">17GB × 78.00</td><td class="num">約 1,326 GB/s</td><td class="num">2.2〜2.7倍</td><td>同上 → <strong>MoE（疎）</strong></td></tr>
+  </tbody>
+  <caption>実効帯域比はM5 Maxの実効帯域500〜600 GB/sに対する倍率。4段階すべてで実効帯域を2倍以上超えており、全重みを読んでいない（=MoE）ことの証拠になる</caption>
+</table>
+</div>
+
+<p>
+  4段階すべてで実効帯域の2倍以上を要求する計算になり、<strong><code>gemma4:26b</code> がMoEであるという推定が
+  独立した4条件で再確認された</strong>。この推定は公式仕様の「25.2B総パラメータ / 3.8Bアクティブ」で裏付けられている。
+  アクティブパラメータが総パラメータの15%程度であることが、17GBというサイズに対する78〜82 tok/sという速度の説明になる。
+</p>
+
+<p>
+  実務上の含意として、<strong>この速度はメモリ帯域律速ではない</strong>。帯域を増やす方向のハードウェア投資で
+  <code>gemma4:26b</code> の速度が比例して伸びることは期待できない。逆に、帯域に張り付いている
+  denseモデル（前回測定の <code>qwen3.8:27b</code>、17GB × 26 tok/s ≒ 442 GB/s）とは投資対効果が根本的に異なる。
+</p>
+
+<h3><span class="t" data-tip="回答の前に思考過程を生成するモデルの動作。精度が上がることがあるが生成トークンが増えて時間がかかる。" tabindex="0">thinkingモード</span>の扱い</h3>
+
+<p>
+  今回の軸1・2測定は <code>--think</code> を一切指定せず、Ollamaの既定動作で実施した。
+  <strong><code>--think false</code> との比較は未測定である。</strong>
+  <code>results/</code> に対応する測定データは存在しないため、thinkingの有無が
+  今回の eval count（2288〜2585トークン）にどれだけ寄与しているかは切り分けられていない。
+</p>
+
+<p class="note">
+  前回測定の 2229トークンから今回 2585トークンへ +16% 増えた理由についても、
+  thinkingの寄与とサンプリングのばらつきを分離できていない。固定プロンプトは同一、測定回数も同一（4回中3回採用）であり、
+  この差は3回平均のばらつきの範囲内である可能性が高いが、確認するには <code>--think false</code> での再測定が必要である。
+</p>
+
+<h2>6. この検証の限界</h2>
+
+<ul>
+  <li>
+    <strong>軸3の採点が間接評価になっている。</strong> <code>bin/run-tasks.sh</code> は <code>claude -p</code> の
+    最終出力のみを保存し、ツール呼び出しの経過を残さない。今回の軸3は「結果の正確さ・幻覚の有無・
+    テンプレートトークンの漏れ・調査の完結性」から間接的に評価した。前回測定で決定的な証拠になった
+    「<code>rg</code> の結果を <code>| head -20</code> で打ち切っていた」ような打ち切り・検索パターンの欠陥は、
+    今回のデータからは検出できない。<strong>軸3の満点は「失敗の証拠が無い」ことを意味し、「過程が最適だった」ことは意味しない。</strong>
+  </li>
+  <li>
+    <strong>各タスク1回のみの実施。</strong> 所要時間はタスク単位で ±20% 動いており（タスク2 +20%、タスク3 −18%）、
+    スコアについても1回の測定でばらつきの範囲を評価することはできない。今回スコアが前回と完全一致したことは
+    再現性の証拠になるが、n=2 である。
+  </li>
+  <li>
+    <strong>合成コード90ファイルという規模。</strong> ファイル数が実プロジェクト規模に増えたとき、
+    <code>gemma4:26b</code> でも検索が崩れる可能性は排除できない。デコイの配置も人為的であり、
+    実コードの紛らわしさを再現しているとは限らない。
+  </li>
+  <li>
+    <strong>コンテキスト長の上限に到達していない。</strong> 262144 でも <code>100% GPU</code> を維持したため、
+    軸2は「上限が見つからなかった」という結果である。262144 より長い設定は未測定。
+  </li>
+  <li>
+    <strong>thinkingの寄与が未分離。</strong> 前節のとおり <code>--think false</code> との比較は未測定。
+  </li>
+  <li>
+    <strong>実タスクでの長時間運用は未検証。</strong> 今回のタスクはいずれも2分以内に完了しており、
+    <span class="t" data-tip="会話がコンテキスト長の上限に近づいた際、Claude Codeが自動で要約して圧縮する機能。" tabindex="0">auto-compact</span> が作動する長さのセッションでの挙動は測っていない。
+  </li>
+</ul>
+
+<hr>
+
+<h2>推奨アクション</h2>
+
+<ol>
+  <li>
+    <strong><code>gemma4:26b</code> / コンテキスト長 262144 の現行構成を維持する。</strong>
+    再測定でスコア・所要時間ともに再現したため、構成を変更する根拠は無い。
+  </li>
+  <li>
+    <strong>影響範囲調査の結果は「宣言箇所を影響先として挙げていないか」を確認する。</strong>
+    2回連続で <code>CampaignEntryModel.php</code> 型の誤検出が出ている。
+    型変更・シグネチャ変更の影響範囲を出させたときは、挙がったファイルが
+    「変更対象を実際に参照しているか」を人間側で1件確認するだけで、この誤検出は落とせる。
+  </li>
+  <li>
+    <strong><code>bin/run-tasks.sh</code> にツール呼び出しの記録を追加する。</strong>
+    <code>claude -p</code> に <code>--output-format stream-json --verbose</code> 相当を渡してツール呼び出しを保存すれば、
+    軸3を間接評価ではなく直接評価できるようになる。今回の検証で唯一、採点の根拠が弱かった箇所である。
+  </li>
+  <li>
+    <strong><code>bin/hide-answers.sh</code> の退避先を <code>$TMPDIR</code> 依存から固定パスに変える。</strong>
+    退避先が <code>${TMPDIR:-/tmp}/llm-bench-answers-hidden</code> で解決されるため、
+    退避時と検知時で <code>TMPDIR</code> が異なると「退避済みなのに未退避と判定される」。
+    今回これが実際に発生し、<code>bin/run-tasks.sh</code> の安全装置が誤って発火した
+    （安全側への誤りであり測定は汚染されていない）。リポジトリ外の真に固定なパスにすれば解消する。
+  </li>
+  <li>
+    <strong><code>--think false</code> での軸1測定を追加する。</strong>
+    生成量の +16% がthinkingの寄与かばらつきかを切り分けられる。待ち時間の評価に直結する。
+  </li>
+</ol>

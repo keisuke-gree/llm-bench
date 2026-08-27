@@ -26,14 +26,16 @@ readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 readonly ANSWERS_DIR="${BENCH_ROOT}/answers"
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-readonly RECORD_FILE="${RESULTS_DIR}/.answers-hidden"
 
-# 退避先はリポジトリ外の固定パスにする(呼び出しのたびに変えない)。固定パスにする
-# ことで、record.shの記録が万一失われても、このスクリプト自身がパスを再導出でき、
-# --status/--restoreが記録ファイルに依存せず独立して動作できるようにしている。
-readonly HIDDEN_DIR="${TMPDIR:-/tmp}"
-readonly HIDDEN_PATH="${HIDDEN_DIR%/}/llm-bench-answers-hidden"
+# 退避先はリポジトリ外の固定パスにする(呼び出しのたびに変えない)。
+#
+# なぜ$TMPDIRを使わないか:
+#   $TMPDIRはサンドボックスの有無で値が変わる(サンドボックス有効時は
+#   /tmp/claude-502等に差し替えられ、無効時はmacOS既定の/var/folders/.../T/に
+#   なる)。退避したときと状態を確認するときで参照先がずれると、実際には退避中
+#   なのに「未退避」と誤判定される恐れがある。$HOME配下の固定パスであれば
+#   サンドボックス設定に左右されず、常に同じ場所を指す。
+readonly HIDDEN_PATH="${HOME}/.llm-bench-answers-hidden"
 
 # ============================================================
 # 状態判定
@@ -70,13 +72,6 @@ print_state_detail() {
     HIDDEN)
       echo "状態: 退避中です"
       echo "  退避先: ${HIDDEN_PATH}"
-      if [[ -f "${RECORD_FILE}" ]]; then
-        echo "  記録ファイル: ${RECORD_FILE}"
-      else
-        echo "  警告: 記録ファイル(${RECORD_FILE})がありません(前回の実行が"
-        echo "        異常終了した可能性がありますが、退避先は固定パスのため"
-        echo "        復元には影響しません)。"
-      fi
       ;;
     INCONSISTENT)
       echo "状態: 不整合です(要手動確認)" >&2
@@ -113,15 +108,7 @@ do_hide() {
       ;;
   esac
 
-  mkdir -p "${RESULTS_DIR}"
   mv "${ANSWERS_DIR}" "${HIDDEN_PATH}"
-
-  {
-    echo "# このファイルは bin/hide-answers.sh --hide が自動生成したものです。"
-    echo "# 採点時に参照してはいけません(正解セットの退避先を示すだけの記録です)。"
-    echo "hidden_path=${HIDDEN_PATH}"
-    echo "hidden_at=$(date '+%Y-%m-%d %H:%M:%S')"
-  } > "${RECORD_FILE}"
 
   echo "=== 正解セットを退避しました ==="
   echo "  ${ANSWERS_DIR} -> ${HIDDEN_PATH}"
@@ -148,7 +135,6 @@ do_restore() {
   esac
 
   mv "${HIDDEN_PATH}" "${ANSWERS_DIR}"
-  rm -f "${RECORD_FILE}"
 
   echo "=== 正解セットを復元しました ==="
   echo "  ${HIDDEN_PATH} -> ${ANSWERS_DIR}"
@@ -194,11 +180,13 @@ print_usage() {
               2=不整合または重大な異常。
   --help      このヘルプを表示します。
 
-異常終了への耐性:
+状態判定の仕組み:
+  状態を記録するファイルは持たず、${ANSWERS_DIR} と ${HIDDEN_PATH}
+  のディレクトリ実在有無だけから状態を判定します。記録ファイルを持たない
+  ことで、\$TMPDIRのような実行環境依存の値による判定のズレを避けています。
   --hide した状態でスクリプト自身や他の処理が異常終了しても、退避先は
-  リポジトリ外の固定パスであるため、--status と --restore は記録ファイル
-  (${RECORD_FILE})に依存せず、ファイルシステムの実際の状態から
-  独立して正しく判定・復旧できます。
+  リポジトリ外の固定パスであるため、--status と --restore はファイル
+  システムの実際の状態から独立して正しく判定・復旧できます。
 
 例:
   $0 --hide
