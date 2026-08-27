@@ -33,6 +33,8 @@ llm-bench/
 │   └── tests/
 ├── bin/                    自動化スクリプト
 │   ├── prepare.sh          モデルの切り替え〜サーバー起動・検証
+│   ├── hide-answers.sh     正解セットをリポジトリ外へ物理的に退避/復元する
+│   ├── run-tasks.sh        軸3・4のタスクをfixture/で自動実行し回答を保存する
 │   ├── record.sh           軸3・4の回答をブラインドなファイル名で払い出す
 │   ├── score.sh            軸3・4のスコアをブラインドIDのまま記録する
 │   ├── restore.sh          検証環境の片付け
@@ -64,6 +66,39 @@ llm-bench/
 
 ## 典型的な作業フロー
 
+**人間がやることは2つだけです。** ①対象モデルを`ollama pull`で取得しておくこと、
+②リポジトリの**ルートディレクトリ**でClaude Codeを起動し、`benchmark-run` Skillを
+呼ぶこと。軸1〜4の測定・実行・採点・レポート生成は`benchmark-run` Skillが自動で
+通しで実行します。
+
+```bash
+ollama pull <model名>   # 未取得のモデルがあれば(人間が実行)
+claude                  # リポジトリのルートディレクトリで起動
+# セッション内で「benchmark-run Skillでベンチマークを実行して」等と依頼する
+```
+
+`benchmark-run` Skillは内部で以下を順に実行します(詳細は
+`.claude/skills/benchmark-run/SKILL.md`を参照)。
+
+1. 対象モデルが`ollama list`にあるか確認する(無ければ停止して人間に取得を促す)
+2. `./bin/sweep.sh`で軸1・2(生成速度・実用的なコンテキスト上限)を自動測定する
+3. `./bin/hide-answers.sh --hide`で正解セットを物理的に退避する(**必須**。詳細は
+   後述の「正解セットへのアクセス制御の実態」を参照)
+4. モデルごとに`./bin/prepare.sh <model> --force`でモデルを切り替え、
+   `./bin/run-tasks.sh`で軸3・4のタスクを無人実行する
+5. `./bin/hide-answers.sh --restore`で正解セットを復元する
+6. `benchmark-score` Skillの手順で採点する
+7. `benchmark-report` Skillの手順でレポートを生成する
+8. `./bin/restore.sh`で検証環境を片付ける
+
+これがリポジトリルートで動く理由は、`fixture/.claude/settings.json`にのみ
+`ollama`コマンドを遮断するサンドボックス設定が入っているためです(詳細は後述の
+「`fixture/.claude/settings.json`について」を参照)。
+
+### Skillを使わない場合(従来の手動手順)
+
+`benchmark-run` Skillを使わず、各ステップを個別に手動で進めることもできます。
+
 1. **軸1・2の測定(全自動)**
 
    ```bash
@@ -72,7 +107,15 @@ llm-bench/
 
    全モデル×全コンテキスト長の組を自動でスイープし、結果を`results/`配下にMarkdownで出力します。
 
-2. **モデルを準備する**
+2. **正解セットを退避する**
+
+   ```bash
+   ./bin/hide-answers.sh --hide
+   ```
+
+   軸3・4の実行前に必ず行います。詳細は後述の「正解セットへのアクセス制御の実態」を参照。
+
+3. **モデルを準備する**
 
    ```bash
    ./bin/prepare.sh <model名>
@@ -81,13 +124,21 @@ llm-bench/
    `fixture/.claude/settings.json`の`model`等を書き換え、そのモデル・コンテキスト長で
    `ollama serve`を起動し、ウォームアップと検証(100% GPUか等)まで行います。
 
-3. **Claude Codeを起動する**
+4. **軸3・4のタスクを実行する**
+
+   ```bash
+   ./bin/run-tasks.sh
+   ```
+
+   `fixture/`で現在のモデルにタスク1〜3を`claude -p`で無人実行させ、回答をブラインドID
+   のファイルとして`results/answers/`配下に自動保存します。対象タスクを絞りたい場合は
+   `--tasks 1,2`のように指定できます。
+
+   対話的に1件ずつ確認しながら進めたい場合は、代わりに以下の手順を使うこともできます。
 
    ```bash
    cd fixture && claude --setting-sources project
    ```
-
-4. **タスクを1件ずつ実施する**
 
    タスクごとに以下を繰り返します。
 
@@ -96,7 +147,15 @@ llm-bench/
    - エージェントの回答を得たら、別ターミナルで `./bin/record.sh <タスク番号>` を実行し、
      払い出されたファイルに回答を貼り付けて保存する(モデル名を伏せたファイル名になる)
 
-5. **全モデル終了後、採点する**
+5. **正解セットを復元する**
+
+   ```bash
+   ./bin/hide-answers.sh --restore
+   ```
+
+   採点には正解セットが必要なため、退避したままでは採点できません。
+
+6. **全モデル終了後、採点する**
 
    `answers/answers.md`の正解セットと、`results/answers/`配下の回答ファイルを突き合わせて
    採点します。`results/mapping.tsv`(どのファイルがどのモデルかの対応表)は採点時には
@@ -105,13 +164,13 @@ llm-bench/
    `results/scores.tsv`に記録します(ブラインドIDのまま記録し、モデル名の解決はレポート
    生成時に行います)。
 
-6. **レポートを作る**
+7. **レポートを作る**
 
    `./bin/new-report.sh <スラグ>`で`reports/`配下に日付入りのレポートファイルを生成し、
    `benchmark-report` Skillで`results/`の実測値とスコアを転記・分析します。
    詳細は`reports/README.md`を参照してください。
 
-7. **片付ける**
+8. **片付ける**
 
    ```bash
    ./bin/restore.sh
@@ -179,7 +238,8 @@ llm-bench/
 ```json
 "skillOverrides": {
   "benchmark-score": "off",
-  "benchmark-report": "off"
+  "benchmark-report": "off",
+  "benchmark-run": "off"
 }
 ```
 
@@ -193,8 +253,8 @@ llm-bench/
 
 ## 正解セットへのアクセス制御の実態
 
-**重要**: `answers/`を技術的に完全に遮断することはできていません。実測で確認した制約を
-正確に把握しておいてください。
+**重要**: `permissions`/`sandbox`の設定だけでは`answers/`を技術的に完全に遮断できません。
+実測で確認した制約を正確に把握しておいてください。
 
 Claude Codeの2つの制御レイヤーは、対象が異なります。
 
@@ -204,8 +264,8 @@ Claude Codeの2つの制御レイヤーは、対象が異なります。
 | `sandbox.filesystem.denyRead` | Bashサブプロセスのファイルアクセス（OSレベル） | **塞げる** |
 
 `permissions.deny`に`Read(../**)`や`Read(**/answers/**)`と書いても、`fixture/`の外にある
-ファイルにはマッチしません（実測で確認）。したがって**Readツール経由のアクセスは
-確認プロンプトが最後の砦**になります。
+ファイルにはマッチしません（実測で確認）。したがって**設定ファイルだけに頼る場合、
+Readツール経由のアクセスは確認プロンプトが最後の砦**になります。
 
 Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています。
 
@@ -216,15 +276,40 @@ Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています
 > **リポジトリを`~/llm-bench`以外に配置した場合、このパスを書き換えてください。**
 > 設定にリポジトリの配置場所が入る形になっているため、cloneした場所に合わせる必要があります。
 
-### 実質的なリスクと、無人実行の前提条件
+### 根本対処: `bin/hide-answers.sh`による物理的な退避
 
-Readツールを塞げないことのリスクは、**現状では低い**と評価できます。エージェントは
-`answers/`の存在を知る手段を持ちません。`fixture/`の中に手がかりは無く、タスク文面にも
-正解セットへの言及はありません。`skillOverrides`でSkillの説明文からの漏洩も塞いでいます。
+`permissions.deny`の限界を設定だけで埋めることはできないため、**`answers/`ディレクトリ
+自体をリポジトリ外の到達不可能な場所へ物理的に移動する**という方法で根本的に解決します。
 
-ただし**無人実行（`claude -p`等）を導入する場合、確認プロンプトという最後の砦が消えます。**
-無人化する前に、`fixture/`で起動したセッションから`answers/answers.md`が読めないことを
-`Read`と`Bash`の両経路で必ず確認してください。**無人化と情報遮断はセットで設計する必要があります。**
+```bash
+./bin/hide-answers.sh --hide      # answers/ を $TMPDIR 配下の固定パスへ退避する
+./bin/hide-answers.sh --status    # 退避中かどうかを確認する
+./bin/hide-answers.sh --restore   # 退避先から元の位置へ戻す
+```
+
+退避中は`answers/`がリポジトリ内に一切存在しないため、Read経由・Bash経由を問わず
+そもそも読みようがありません。設定ファイルの表現力の限界に依存しない、確実な対処です。
+`benchmark-run` Skillは軸3・4の実行前に必ず`--hide`を、実行後に必ず`--restore`を行います。
+
+### 無人実行（`claude -p`）を使う前提条件
+
+**無人実行（`claude -p`等）では確認プロンプトが一切出ません。** 対話セッションで最後の
+砦だった確認プロンプトが機能しないため、`answers/`が存在する状態で無人実行すると
+モデルに読まれてしまう可能性があります。`bin/run-tasks.sh`はこれに対する安全装置として、
+実行前に`bin/hide-answers.sh --status`で退避済みであることを確認し、退避されていなければ
+エラーで停止します。**無人化と物理的な退避はセットで設計されています。**
+
+さらに無人実行では、`permissions.allow`に無いコマンドは確認プロンプトではなく**失敗**に
+なります(対話セッションのように「許可しますか?」と聞かれてYesを選ぶ、ということが
+起きません)。そのためモデルがコード調査に使う読み取り専用コマンド
+(`rg` / `fd` / `ls` / `cat` / `head` / `tail` / `wc` およびGrep/Globツール)を
+`fixture/.claude/settings.json`の`permissions.allow`に明示的に許可しています。
+
+**`Bash(find *)`と`Bash(grep *)`は意図的に許可していません。** `fixture/CLAUDE.md`には
+「検索は`rg`に統一する、`grep`は使わない」「`fd`に統一する、`find`は使わない」という
+ルールが書かれており、これを文書だけでなく技術層(許可リスト)でも強制する意図です。
+文書によるルールがローカルLLMに守られなかった実測結果があるため、この二重化には意味が
+あります。
 
 ## フィクスチャを公開しないこと
 
@@ -237,6 +322,8 @@ Readツールを塞げないことのリスクは、**現状では低い**と評
 | スクリプト | 説明 |
 |---|---|
 | `bin/prepare.sh` | モデル名の解決・存在確認・`fixture/.claude/settings.json`のパッチ・`ollama serve`の起動・ウォームアップと検証(100% GPUか等)までを1コマンドで行う |
+| `bin/hide-answers.sh` | `answers/`をリポジトリ外の固定パスへ物理的に退避/復元する(`--hide` / `--restore` / `--status`) |
+| `bin/run-tasks.sh` | `fixture/`で現在のモデルにタスクを`claude -p`で無人実行させ、回答をブラインドIDのファイルとして自動保存する(退避されていなければエラーで停止する安全装置つき) |
 | `bin/record.sh` | 現在のモデルを`fixture/.claude/settings.json`から自動で読み取り、軸3・4の回答をランダムなブラインドIDのファイルとして払い出す |
 | `bin/score.sh` | 軸3・4のスコアをブラインドIDのまま`results/scores.tsv`に記録する(`results/mapping.tsv`は参照しない) |
 | `bin/restore.sh` | `bin/prepare.sh`が起動した`ollama serve`を停止し、検証環境を片付ける |
@@ -256,7 +343,11 @@ Readツールを塞げないことのリスクは、**現状では低い**と評
 
 ## 実行環境についての注意
 
-- `bin/prepare.sh` / `bin/restore.sh` / `bin/sweep.sh` は、人間が通常のターミナルから
-  直接実行する想定です。Claude Codeのエージェント経由では、サンドボックスのlocalhost遮断により
-  `ollama`コマンドが使えず動作しません。
+- `bin/prepare.sh` / `bin/restore.sh` / `bin/sweep.sh` / `bin/run-tasks.sh`は、
+  **リポジトリのルートディレクトリ**で起動したClaude Codeセッション、または人間が
+  通常のターミナルから直接実行する想定です。`ollama`コマンドを遮断するサンドボックス設定は
+  `fixture/.claude/settings.json`にのみ入っているため、`fixture/`の**外**(ルート)で
+  起動したセッションからはこれらのスクリプトが問題なく実行できます。逆に`fixture/`の
+  **中**で起動したセッション(軸3・4のタスクを解かせているエージェント自身)からは、
+  サンドボックスのlocalhost遮断により`ollama`コマンドが使えず動作しません。
 - macOS標準の`/bin/bash`(3.2系)で動作します。

@@ -12,7 +12,8 @@
   ],
   "skillOverrides": {
     "benchmark-score": "off",
-    "benchmark-report": "off"
+    "benchmark-report": "off",
+    "benchmark-run": "off"
   },
   "sandbox": {
     "enabled": true,
@@ -55,7 +56,16 @@
       "Bash(docker-compose -f tools/ci/docker-compose.yml up *)",
       "Bash(docker-compose -f tools/ci/docker-compose.yml down)",
       "Bash(ollama ps)",
-      "Bash(ollama run *)"
+      "Bash(ollama run *)",
+      "Bash(rg *)",
+      "Bash(fd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Grep",
+      "Glob"
     ],
     "deny": [
       "mcp__*",
