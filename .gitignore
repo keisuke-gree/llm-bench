@@ -8,10 +8,6 @@ results/*
 # 起動中サーバーのPIDファイル
 .ollama.pid
 
-# Phpactor等が生成するインデックス
-.phpactor/
-.phpactor.json
-
 # PHPの依存(フィクスチャは依存解決を必要としない)
 vendor/
 

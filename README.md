@@ -79,9 +79,8 @@ llm-bench/
 │   ├── sweep.sh            軸1・2の自動スイープ測定
 │   ├── new-report.sh       雛形から日付入りのレポートファイルを生成する
 │   └── lib/common.sh       上記が共有する定数(リポジトリ内のパス・モデルテーブル)と関数
-├── docs/                   使い方のドキュメント
-│   ├── runbook.md          実行手順書(コマンドをコピペしながら進める用)
-│   └── spec.md             設計仕様書(なぜそう測るか・なぜその基準か)
+├── docs/
+│   └── spec.md             設計仕様書(なぜそう測るか・なぜその基準か・測定値の読み方)
 ├── reports/                測定結果とその考察(レポートHTML)
 │   ├── README.md           レポート索引
 │   ├── _template.html      レポートの雛形(bin/new-report.shが使う)
@@ -177,36 +176,24 @@ claude --permission-mode auto                # リポジトリのルートディ
 
 | ファイル | 役割 | サンドボックス |
 |---|---|---|
-| `.claude/settings.json`（ルート） | **ベンチマークを回す側**。`ollama`やスクリプトを実行する | **有効。ただしlocalhost:11434のみ許可** |
+| `.claude/settings.json`（ルート） | **ベンチマークを回す側**。`ollama`やスクリプトを実行する | 有効。ただし`auto mode`で起動するため、必要な操作は確認を経て通る |
 | `fixture/.claude/settings.json` | **測定される側**。ここでモデルがタスクを解く | **有効。外部通信を一切許可しない**（`allowUnsandboxedCommands: false`） |
 
-`bin/`配下のスクリプトは内部で`ollama`や`curl`を使ってlocalhost:11434と通信します。
-サンドボックスは既定でlocalhost宛も遮断するため、そのままでは動きません。
+`bin/`配下のスクリプトは`ollama serve`でポートをbind(listen)します。サンドボックスは
+bindを拒否するため、**設定でこれを許可することはできません。** `auto mode`での起動が
+必要なのはこのためです（前述の「`auto mode`が必要な理由」を参照）。
 
-そこでルート側だけ`sandbox.network.allowedDomains`でOllamaのポートを許可しています。
-
-```json
-"sandbox": {
-  "enabled": true,
-  "network": {
-    "allowedDomains": ["127.0.0.1:11434", "[::1]:11434", "localhost:11434"]
-  }
-}
-```
-
-**サンドボックス自体は有効なままです。** 許可したのはOllamaのポートだけで、それ以外の
-外部通信は引き続き遮断されます。サンドボックスを丸ごと無効化するより安全です。
-
-**`fixture/`側には`allowedDomains`を入れていません。** 測定対象のモデルがOllamaを
-直接操作できるようになると、隔離の意味が失われます。
+**`fixture/`側は`allowUnsandboxedCommands: false`で、サンドボックスを外す経路自体が
+ありません。** 測定対象のモデルがOllamaを直接操作できるようになると隔離の意味が
+失われるため、あちらは`auto mode`の影響を受けない設計にしています。
 
 設定は**カレントディレクトリ基準で解決される**ため、`fixture/`で起動したセッションは
 ルートの設定を読みません。測定対象の隔離（サンドボックス有効、`ollama`実行不可、
 外部通信不可）は維持されます。
 
-### Skillを使わない場合(従来の手動手順)
+### スクリプトを個別に実行する場合
 
-`benchmark-run` Skillを使わず、各ステップを個別に手動で進めることもできます。
+`benchmark-run` Skillを使わず、各ステップを個別に実行することもできます。
 
 1. **軸1・2の測定(全自動)**
 
@@ -459,8 +446,8 @@ Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています
 
 ## 詳しいドキュメント
 
-- 実行手順を上から順に進めたい場合は `docs/runbook.md` を参照してください。
-- 「なぜこの4軸で測るのか」「なぜこの採点基準なのか」等の設計根拠は `docs/spec.md` を参照してください。
+- エージェントが辿る工程を1手順ずつ確認したい場合は `.claude/skills/benchmark-run/SKILL.md` を参照してください。採点の手順は `.claude/skills/benchmark-score/SKILL.md` にあります。
+- 「なぜこの4軸で測るのか」「なぜこの採点基準なのか」等の設計根拠は `docs/spec.md` を参照してください。`ollama ps` や `eval rate` の読み方も同ファイルの「軸1・2の測定値の読み方」にあります。
 - 実際に測定した結果とその考察は `reports/` 配下のレポートを参照してください（ブラウザで開いてください。専門用語はホバーで説明が出ます）。索引は `reports/README.md` にあります。最新のレポート（`reports/2026-08-27-initial-comparison.html`）は3モデルの比較、アーキテクチャ（MoE/dense）による速度差の分析、ハードウェア投資が解決策になるかの検討を含みます。
 - タスクの型と採点基準の設計意図は `docs/spec.md` の「軸3・4共通: タスクの型」以降を参照してください。
 
