@@ -21,14 +21,8 @@ set -euo pipefail
 # 設定値
 # ============================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-readonly REPORTS_DIR="${BENCH_ROOT}/reports"
-readonly TEMPLATE_HTML="${REPORTS_DIR}/_template.html"
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-readonly SCORES_TSV="${RESULTS_DIR}/scores.tsv"
-readonly MAPPING_TSV="${RESULTS_DIR}/mapping.tsv"
+# 共有の定数・関数(パス)を読み込む。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 # スラグに許可する文字(英小文字・数字・ハイフンのみ)
 readonly SLUG_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'

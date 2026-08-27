@@ -33,29 +33,11 @@
 set -euo pipefail
 
 # ============================================================
-# 設定値(冒頭にまとめる。ハードコーディングを避けるため既定値はここでのみ定義)
+# 設定値(このスクリプト固有のものだけをここに置く)
 # ============================================================
 
-# スクリプト自身の位置からリポジトリのルートを解決する(実行時のカレントディレクトリに依存しないため)。
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-readonly SETTINGS_JSON="${BENCH_ROOT}/fixture/.claude/settings.json"
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-readonly SERVE_LOG="${RESULTS_DIR}/ollama-serve.log"
-readonly PID_FILE="${RESULTS_DIR}/.ollama.pid"
-
-# モデル名 -> コンテキスト長(実機で確認済みの実測値)のテーブル。
-# bash 3.2 (macOS標準)は連想配列(declare -A)を使えないため、
-# 「モデル名の配列」と「コンテキスト長の配列」を対で持つ索引配列テーブルにしている。
-readonly MODEL_TABLE_NAMES=("gemma4:26b" "qwen3-coder:30b" "qwen3.8:27b")
-readonly MODEL_TABLE_CONTEXTS=("262144" "131072" "131072")
-
-# CLAUDE_CODE_AUTO_COMPACT_WINDOW をコンテキスト長から算出するための比率。
-# 由来: 本番値 115000 / 131072 ≈ 0.877
-# 検算: 131072 * 0.877 ≈ 114950 -> 1000単位丸めで115000(本番値と一致)
-#       262144 * 0.877 ≈ 229900 -> 1000単位丸めで230000
-readonly AUTO_COMPACT_RATIO="0.877"
+# 共有の定数・関数(パス、モデルテーブル、サーバー状態確認、backup_file 等)を読み込む。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 # OLLAMA_KEEP_ALIVEの既定値。軸3・4のタスクは人間の確認待ちでアイドルが発生しやすく、
 # Ollamaの既定値(5分)だとモデルがアンロードされて再ロード時間が発生し、
@@ -71,37 +53,11 @@ readonly DENY_READ_REPO_DIRS=("answers" "tasks" "results" "reports" "docs" "bin"
 # リポジトリの配置場所に依存しない、固定の読み取り禁止パス。
 readonly DENY_READ_FIXED=("~/.ssh" "~/.gnupg")
 
-readonly SERVER_HOST="127.0.0.1"
-readonly SERVER_PORT="11434"
-readonly SERVER_READY_TIMEOUT_SEC=90   # サーバー起動待ちの最大秒数
-readonly SERVER_STOP_TIMEOUT_SEC=30    # 既存サーバー停止待ちの最大秒数
 readonly WARMUP_TIMEOUT_SEC=180        # ウォームアップの最大待ち秒数
 
 # ============================================================
 # ユーティリティ関数
 # ============================================================
-
-lookup_context_length() {
-  local model="$1" i
-  for i in "${!MODEL_TABLE_NAMES[@]}"; do
-    if [[ "${MODEL_TABLE_NAMES[$i]}" == "${model}" ]]; then
-      echo "${MODEL_TABLE_CONTEXTS[$i]}"
-      return 0
-    fi
-  done
-  return 1
-}
-
-# コンテキスト長からCLAUDE_CODE_AUTO_COMPACT_WINDOWを算出する。
-# awkで浮動小数点計算を行い、1000単位で四捨五入する(bash自体は整数演算しかできないため)。
-calc_auto_compact_window() {
-  local context_length="$1"
-  awk -v cl="${context_length}" -v ratio="${AUTO_COMPACT_RATIO}" 'BEGIN {
-    raw = cl * ratio
-    rounded = int((raw + 500) / 1000) * 1000
-    printf "%d", rounded
-  }'
-}
 
 # 指定したモデル名がollamaにpull済みかどうかを`ollama list`で検証する。
 # `ollama list`自体が失敗した場合(サーバー未起動、ollamaコマンドが無い等)は、
@@ -123,18 +79,6 @@ check_model_exists() {
   fi
 }
 
-# ファイルのタイムスタンプ付きバックアップを作成し、バックアップパスを標準出力に返す。
-# 絶対パスを、$HOME配下であれば "~/..." 形式に変換する(それ以外はそのまま返す)。
-# settings.json の denyRead は従来から "~/" 形式で記録されているため、その形式を維持する。
-to_home_relative() {
-  local path="$1"
-  case "${path}" in
-    "${HOME}")   echo "~" ;;
-    "${HOME}"/*) echo "~/${path#"${HOME}"/}" ;;
-    *)           echo "${path}" ;;
-  esac
-}
-
 # リポジトリの実際の配置場所から denyRead 配列を組み立て、JSON配列として出力する。
 # これにより ~/llm-bench 以外にcloneしても読み取り禁止が正しく効く。
 build_deny_read_json() {
@@ -148,15 +92,6 @@ build_deny_read_json() {
       echo "${root_rel}/${dir}"
     done
   } | jq -Rn '[inputs]'
-}
-
-backup_file() {
-  local file="$1"
-  local ts backup
-  ts="$(date +%Y%m%d-%H%M%S)"
-  backup="${file}.bak.${ts}"
-  cp -p "${file}" "${backup}"
-  echo "${backup}"
 }
 
 # fixture/.claude/settings.json をjqで4キーのみパッチする(dry-runの場合は表示のみ)。
@@ -250,35 +185,6 @@ patch_settings_json() {
   else
     echo "  .sandbox.filesystem.denyRead: 変更なし(配置場所と一致)"
   fi
-}
-
-# 指定ホスト:ポートでOllamaサーバーが応答可能かを確認する
-is_server_running() {
-  curl -fsS "http://${SERVER_HOST}:${SERVER_PORT}/" >/dev/null 2>&1
-}
-
-wait_for_server_ready() {
-  local waited=0
-  while [ "${waited}" -lt "${SERVER_READY_TIMEOUT_SEC}" ]; do
-    if is_server_running; then
-      return 0
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  return 1
-}
-
-wait_for_server_stopped() {
-  local waited=0
-  while [ "${waited}" -lt "${SERVER_STOP_TIMEOUT_SEC}" ]; do
-    if ! is_server_running; then
-      return 0
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  return 1
 }
 
 # 既存の`ollama serve`を停止する。ユーザーが手動起動しているサーバーを止めることに

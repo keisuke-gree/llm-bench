@@ -20,20 +20,14 @@ set -euo pipefail
 # 設定値
 # ============================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-readonly PID_FILE="${RESULTS_DIR}/.ollama.pid"
-
-readonly STOP_TIMEOUT_SEC=30
-readonly SERVER_PORT="11434"   # Ollamaが待ち受けるポート
+# 共有の定数・関数(パス、SERVER_PORT、SERVER_STOP_TIMEOUT_SEC 等)を読み込む。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 # ============================================================
 # メイン処理
 # ============================================================
 
-do_restore() {
+stop_bench_server() {
   if [[ ! -f "${PID_FILE}" ]]; then
     echo "PIDファイル(${PID_FILE})が見つかりません。"
     echo "bin/prepare.sh が起動したサーバーが無い(または既に停止済み)と判断し、何もしません。"
@@ -47,7 +41,7 @@ do_restore() {
 
       local waited=0
       while kill -0 "${pid}" 2>/dev/null; do
-        if [ "${waited}" -ge "${STOP_TIMEOUT_SEC}" ]; then
+        if [ "${waited}" -ge "${SERVER_STOP_TIMEOUT_SEC}" ]; then
           echo "警告: 通常停止がタイムアウトしたため強制終了(kill -9)します。" >&2
           kill -9 "${pid}" 2>/dev/null || true
           break
@@ -90,7 +84,7 @@ do_restore() {
 
     local waited=0
     while [[ -n "$(lsof -nP -iTCP:"${SERVER_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)" ]]; do
-      if [ "${waited}" -ge "${STOP_TIMEOUT_SEC}" ]; then
+      if [ "${waited}" -ge "${SERVER_STOP_TIMEOUT_SEC}" ]; then
         echo "警告: 停止がタイムアウトしました。手動で確認してください:" >&2
         echo "         lsof -nP -iTCP:${SERVER_PORT} -sTCP:LISTEN" >&2
         break
@@ -148,7 +142,7 @@ main() {
     esac
   done
 
-  do_restore
+  stop_bench_server
 }
 
 main "$@"

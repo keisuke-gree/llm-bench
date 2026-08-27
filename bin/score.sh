@@ -19,12 +19,8 @@ set -euo pipefail
 # 設定値
 # ============================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-readonly ANSWERS_DIR="${RESULTS_DIR}/answers"
-readonly SCORES_TSV="${RESULTS_DIR}/scores.tsv"
+# 共有の定数・関数(パス)を読み込む。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 readonly SCORE_MIN=0
 readonly SCORE_MAX=5
@@ -52,7 +48,7 @@ validate_score() {
 # 無くても記録は続行する(IDの打ち間違いを検知するための警告のみ)。
 warn_if_answer_missing() {
   local blind_id="$1"
-  local answer_file="${ANSWERS_DIR}/${blind_id}.md"
+  local answer_file="${RESULT_ANSWERS_DIR}/${blind_id}.md"
   if [[ ! -f "${answer_file}" ]]; then
     echo "警告: 回答ファイル ${answer_file} が見つかりません。" >&2
     echo "      ブラインドIDの打ち間違いの可能性があります。IDを確認してください。" >&2

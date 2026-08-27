@@ -22,10 +22,8 @@ set -euo pipefail
 # 設定値
 # ============================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-readonly ANSWERS_DIR="${BENCH_ROOT}/answers"
+# 共有の定数・関数(パス。正解セットは ANSWER_KEY_DIR)を読み込む。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 # 退避先はリポジトリ外の固定パスにする(呼び出しのたびに変えない)。
 #
@@ -48,7 +46,7 @@ readonly HIDDEN_PATH="${HOME}/.llm-bench-answers-hidden"
 #   LOST          : どちらにも存在しない(正解セットの所在不明。重大な異常)
 detect_state() {
   local local_exists="false" hidden_exists="false"
-  [[ -d "${ANSWERS_DIR}" ]] && local_exists="true"
+  [[ -d "${ANSWER_KEY_DIR}" ]] && local_exists="true"
   [[ -d "${HIDDEN_PATH}" ]] && hidden_exists="true"
 
   if [[ "${local_exists}" == "true" && "${hidden_exists}" == "false" ]]; then
@@ -67,7 +65,7 @@ print_state_detail() {
   case "${state}" in
     NOT_HIDDEN)
       echo "状態: 退避していません(通常状態)"
-      echo "  ${ANSWERS_DIR} に存在します。"
+      echo "  ${ANSWER_KEY_DIR} に存在します。"
       ;;
     HIDDEN)
       echo "状態: 退避中です"
@@ -75,12 +73,12 @@ print_state_detail() {
       ;;
     INCONSISTENT)
       echo "状態: 不整合です(要手動確認)" >&2
-      echo "  ${ANSWERS_DIR} と ${HIDDEN_PATH} の両方に存在します。" >&2
+      echo "  ${ANSWER_KEY_DIR} と ${HIDDEN_PATH} の両方に存在します。" >&2
       echo "  どちらが最新か手動で確認し、片方を削除してから再実行してください。" >&2
       ;;
     LOST)
       echo "状態: 重大な異常です(要手動確認)" >&2
-      echo "  ${ANSWERS_DIR} にも ${HIDDEN_PATH} にも存在しません。" >&2
+      echo "  ${ANSWER_KEY_DIR} にも ${HIDDEN_PATH} にも存在しません。" >&2
       echo "  正解セットの所在が不明です。バックアップ(gitの履歴等)から復元してください。" >&2
       ;;
   esac
@@ -108,15 +106,15 @@ do_hide() {
       ;;
   esac
 
-  mv "${ANSWERS_DIR}" "${HIDDEN_PATH}"
+  mv "${ANSWER_KEY_DIR}" "${HIDDEN_PATH}"
 
   echo "=== 正解セットを退避しました ==="
-  echo "  ${ANSWERS_DIR} -> ${HIDDEN_PATH}"
+  echo "  ${ANSWER_KEY_DIR} -> ${HIDDEN_PATH}"
   echo ""
   echo "測定終了後は必ず './bin/hide-answers.sh --restore' を実行してください。"
 }
 
-do_restore() {
+restore_answer_key() {
   local state
   state="$(detect_state)"
 
@@ -134,10 +132,10 @@ do_restore() {
       ;;
   esac
 
-  mv "${HIDDEN_PATH}" "${ANSWERS_DIR}"
+  mv "${HIDDEN_PATH}" "${ANSWER_KEY_DIR}"
 
   echo "=== 正解セットを復元しました ==="
-  echo "  ${HIDDEN_PATH} -> ${ANSWERS_DIR}"
+  echo "  ${HIDDEN_PATH} -> ${ANSWER_KEY_DIR}"
 }
 
 do_status() {
@@ -164,7 +162,7 @@ print_usage() {
   $0 --hide | --restore | --status | --help
 
 説明:
-  測定中に正解セット(${ANSWERS_DIR})を、リポジトリ外の固定パス
+  測定中に正解セット(${ANSWER_KEY_DIR})を、リポジトリ外の固定パス
   (${HIDDEN_PATH})へ物理的に退避/復元するスクリプトです。
 
   無人実行(claude -p)では確認プロンプトが出ないため、answers/ が存在すると
@@ -181,7 +179,7 @@ print_usage() {
   --help      このヘルプを表示します。
 
 状態判定の仕組み:
-  状態を記録するファイルは持たず、${ANSWERS_DIR} と ${HIDDEN_PATH}
+  状態を記録するファイルは持たず、${ANSWER_KEY_DIR} と ${HIDDEN_PATH}
   のディレクトリ実在有無だけから状態を判定します。記録ファイルを持たない
   ことで、\$TMPDIRのような実行環境依存の値による判定のズレを避けています。
   --hide した状態でスクリプト自身や他の処理が異常終了しても、退避先は
@@ -206,7 +204,7 @@ main() {
       do_hide
       ;;
     --restore)
-      do_restore
+      restore_answer_key
       ;;
     --status)
       do_status

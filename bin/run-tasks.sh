@@ -23,19 +23,14 @@ set -euo pipefail
 # 設定値
 # ============================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+# 共有の定数・関数(パス、run_with_timeout、read_current_model 等)を読み込む。
+# TRACES_DIR(軸3採点用のイベントストリーム保存先)は回答本文の RESULT_ANSWERS_DIR とは
+# 別ディレクトリになっている。軸4は最終回答テキストのみを、軸3はツール呼び出しを含む
+# 全イベントを参照する、という採点フェーズでの参照先の違いに対応させるため。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
-readonly FIXTURE_DIR="${BENCH_ROOT}/fixture"
-readonly SETTINGS_JSON="${FIXTURE_DIR}/.claude/settings.json"
-readonly TASKS_MD="${BENCH_ROOT}/tasks/tasks.md"
-readonly HIDE_ANSWERS_SH="${SCRIPT_DIR}/hide-answers.sh"
-readonly RECORD_SH="${SCRIPT_DIR}/record.sh"
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-# 軸3(調査の過程)採点用のイベントストリーム保存先。回答本文(results/answers/)とは
-# 別ディレクトリに分ける(軸4はanswers/の最終回答テキストのみを、軸3はtraces/の
-# ツール呼び出しを含む全イベントを参照する、という採点フェーズでの参照先の違いに対応させるため)。
-readonly TRACES_DIR="${RESULTS_DIR}/traces"
+readonly HIDE_ANSWERS_SH="${BIN_DIR}/hide-answers.sh"
+readonly RECORD_SH="${BIN_DIR}/record.sh"
 
 readonly DEFAULT_TIMEOUT_SEC=900
 
@@ -54,22 +49,6 @@ require_answers_hidden() {
   echo "        先に以下を実行してください:" >&2
   echo "          ./bin/hide-answers.sh --hide" >&2
   exit 1
-}
-
-# fixture/.claude/settings.json から現在のモデル名を読み取る(表示用)。
-read_current_model() {
-  if [[ ! -f "${SETTINGS_JSON}" ]]; then
-    echo "エラー: ${SETTINGS_JSON} が見つかりません。" >&2
-    echo "        先に './bin/prepare.sh <モデル名>' を実行してください。" >&2
-    exit 1
-  fi
-  local model
-  model="$(jq -r '.model // empty' "${SETTINGS_JSON}")"
-  if [[ -z "${model}" ]]; then
-    echo "エラー: ${SETTINGS_JSON} から .model を読み取れませんでした。" >&2
-    exit 1
-  fi
-  echo "${model}"
 }
 
 # tasks/tasks.md に存在する「## タスクN」見出しの番号一覧を出現順に返す。
@@ -105,29 +84,6 @@ extract_task_body() {
     }
     in_target && fence == 1 { print }
   ' "${TASKS_MD}"
-}
-
-# コマンドをタイムアウト付きで実行する(macOS標準にはGNU timeoutが無いための自前実装。
-# bin/prepare.sh・bin/sweep.shの同名処理と同じ考え方)。
-# 呼び出し側でリダイレクト(> file 2>&1 等)を付けて呼ぶことを想定している。
-run_with_timeout() {
-  local timeout_sec="$1"
-  shift
-  "$@" &
-  local pid=$!
-  local waited=0
-  local rc=0
-  while kill -0 "${pid}" 2>/dev/null; do
-    if [ "${waited}" -ge "${timeout_sec}" ]; then
-      kill -9 "${pid}" 2>/dev/null || true
-      wait "${pid}" 2>/dev/null || true
-      return 124
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  wait "${pid}" || rc=$?
-  return "${rc}"
 }
 
 # record.sh の出力から「ブラインドID:」「回答ファイル:」の値を取り出す。
@@ -293,7 +249,7 @@ print_usage() {
   claude -p は --output-format stream-json --verbose で実行し、最終回答
   だけでなくツール呼び出しを含む全イベントを results/traces/<ブラインドID>.jsonl
   へ保存します(軸3「調査の過程」の採点用)。results/answers/<ブラインドID>.md
-  には従来通り最終回答テキストのみを保存します(軸4の採点用)。
+  には最終回答テキストのみを保存します(軸4の採点用)。
 
   安全装置: answers/ が bin/hide-answers.sh --hide で退避されていない場合、
   測定を汚染する前にエラーで停止します。

@@ -41,27 +41,19 @@
 set -euo pipefail
 
 # ===========================================================================
-# パス解決(スクリプトはリポジトリのルートから実行される想定だが、スクリプト自身の
-# 位置からも解決できるようにし、カレントディレクトリに依存しないようにする)
+# 共有の定数・関数(パス、モデルテーブル、サーバー状態確認、run_with_timeout 等)
 # ===========================================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 # ===========================================================================
-# 定数(冒頭にまとめる。ハードコーディングを避けるため、既定値はここでのみ定義)
+# 定数(このスクリプト固有のものだけをここに置く)
 # ===========================================================================
 
-# 測定対象モデル一覧。
-# 旧候補(量子化形式がnvfp4でMLXネイティブの量子化行列演算カーネルが無く、
-# int4/int8のaffine modeのみ対応のため、ロード時に逆量子化されて実質フル精度相当で
-# 動作するモデル)は実測23.4 tokens/secと3モデル中最も遅く、評価する前から負けが
-# 確定していたため除外した。
-# 代わりにqwen3.8:27bを追加。量子化がQ4_K_M(GGUF/llama.cppネイティブ)で上記の問題が無く、
-# モデル説明に「popular harnessesや開発ツールへの対応拡大」「環境フィードバックのより適切な処理」が
-# 明記されており、現在の課題(ツール呼び出し形式の破綻、エラー原因の誤診)に直接対応する可能性がある。
-readonly DEFAULT_MODELS_CSV="gemma4:26b,qwen3-coder:30b,qwen3.8:27b"
+# 既定の測定対象モデルは lib/common.sh のモデルテーブルから導出する
+# (モデルを追加する際に2箇所を揃える必要をなくすため)。
+# 各モデルを候補に選んだ経緯は docs/spec.md を参照。
+readonly DEFAULT_MODELS_CSV="$(model_names_csv)"
 readonly DEFAULT_CONTEXTS_CSV="32768,65536,131072,262144"
 readonly DEFAULT_RUNS=4
 
@@ -70,10 +62,6 @@ readonly DEFAULT_RUNS=4
 # 少なすぎてeval rateが安定しない)。
 readonly FIXED_PROMPT='PHPで、メールアドレスを検証するバリデータクラスを1つ書いてください。空文字・@の有無・ドメイン部の形式をそれぞれチェックし、異なるエラーメッセージを返すようにしてください。PHPDocコメントも付けてください。'
 
-readonly SERVER_HOST="127.0.0.1"
-readonly SERVER_PORT="11434"
-readonly SERVER_READY_TIMEOUT_SEC=90     # サーバー起動待ちの最大秒数
-readonly SERVER_STOP_TIMEOUT_SEC=30      # --force時の既存サーバー停止待ちの最大秒数
 readonly MODEL_LOAD_TIMEOUT_SEC=180      # ウォームアップロードの最大待ち秒数
 readonly RUN_TIMEOUT_SEC=180             # 1回の生成測定の最大待ち秒数
 
@@ -132,59 +120,8 @@ show_help() {
 EOF
 }
 
-# 指定ホスト:ポートでOllamaサーバーが応答可能かを確認する
-is_server_running() {
-  curl -fsS "http://${SERVER_HOST}:${SERVER_PORT}/" >/dev/null 2>&1
-}
-
-# サーバーが応答可能になるまでポーリングする(タイムアウトあり)
-wait_for_server_ready() {
-  local waited=0
-  while [ "$waited" -lt "$SERVER_READY_TIMEOUT_SEC" ]; do
-    if is_server_running; then
-      return 0
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  return 1
-}
-
-# サーバーが完全に停止するまでポーリングする(タイムアウトあり)
-wait_for_server_stopped() {
-  local waited=0
-  while [ "$waited" -lt "$SERVER_STOP_TIMEOUT_SEC" ]; do
-    if ! is_server_running; then
-      return 0
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  return 1
-}
-
-# コマンドをタイムアウト付きで実行する(macOS標準にはGNU timeoutが無いための自前実装)。
-# 呼び出し側でリダイレクト(> file 2>&1 等)を付けて呼ぶことを想定している。
-# 例: run_with_timeout 60 ollama run "$model" "warmup" >/dev/null 2>&1
-run_with_timeout() {
-  local timeout_sec="$1"
-  shift
-  "$@" &
-  local pid=$!
-  local waited=0
-  local rc=0
-  while kill -0 "$pid" 2>/dev/null; do
-    if [ "$waited" -ge "$timeout_sec" ]; then
-      kill -9 "$pid" 2>/dev/null || true
-      wait "$pid" 2>/dev/null || true
-      return 124
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  wait "$pid" || rc=$?
-  return "$rc"
-}
+# サーバーの状態確認(is_server_running / wait_for_server_ready /
+# wait_for_server_stopped)と run_with_timeout は lib/common.sh にある。
 
 # 文字列の前後の空白を除去して標準出力に返す
 trim() {

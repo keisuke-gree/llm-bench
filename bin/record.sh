@@ -19,13 +19,8 @@ set -euo pipefail
 # 設定値
 # ============================================================
 
-readonly SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-readonly BENCH_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-
-readonly SETTINGS_JSON="${BENCH_ROOT}/fixture/.claude/settings.json"
-readonly RESULTS_DIR="${BENCH_ROOT}/results"
-readonly ANSWERS_DIR="${RESULTS_DIR}/answers"
-readonly MAPPING_TSV="${RESULTS_DIR}/mapping.tsv"
+# 共有の定数・関数(パス、read_current_model 等)を読み込む。
+source "$(cd "$(dirname "$0")" && pwd)/lib/common.sh"
 
 readonly BLIND_ID_MIN=1
 readonly BLIND_ID_MAX=99
@@ -34,22 +29,8 @@ readonly BLIND_ID_MAX=99
 # ユーティリティ関数
 # ============================================================
 
-# fixture/.claude/settings.json から現在のモデル名を読み取る。
-# ユーザーがモデル名を打ち直す必要をなくし、転記ミスを防ぐための処理。
-read_current_model() {
-  if [[ ! -f "${SETTINGS_JSON}" ]]; then
-    echo "エラー: ${SETTINGS_JSON} が見つかりません。" >&2
-    echo "        先に './bin/prepare.sh <モデル名>' を実行してください。" >&2
-    exit 1
-  fi
-  local model
-  model="$(jq -r '.model // empty' "${SETTINGS_JSON}")"
-  if [[ -z "${model}" ]]; then
-    echo "エラー: ${SETTINGS_JSON} から .model を読み取れませんでした。" >&2
-    exit 1
-  fi
-  echo "${model}"
-}
+# モデル名は read_current_model()(lib/common.sh)で settings.json から読み取る。
+# ユーザーがモデル名を打ち直す必要をなくし、転記ミスを防ぐため。
 
 # fixture/.claude/settings.json から現在のコンテキスト長を読み取る(記録用)。
 read_current_context() {
@@ -64,7 +45,7 @@ pick_blind_id() {
   n="${BLIND_ID_MIN}"
   while [ "${n}" -le "${BLIND_ID_MAX}" ]; do
     padded="$(printf 'answer-%02d' "${n}")"
-    if [[ ! -f "${ANSWERS_DIR}/${padded}.md" ]]; then
+    if [[ ! -f "${RESULT_ANSWERS_DIR}/${padded}.md" ]]; then
       candidates+=("${padded}")
     fi
     n=$((n + 1))
@@ -160,7 +141,7 @@ main() {
     exit 1
   fi
 
-  mkdir -p "${ANSWERS_DIR}"
+  mkdir -p "${RESULT_ANSWERS_DIR}"
 
   # --- 1. 現在のモデルを読み取る ---
   local model context
@@ -175,7 +156,7 @@ main() {
   append_mapping_row "${blind_id}" "${model}" "${context}" "${task_no}"
 
   # --- 4. 空の回答ファイルを作成する(モデル名は絶対に書かない) ---
-  local answer_file="${ANSWERS_DIR}/${blind_id}.md"
+  local answer_file="${RESULT_ANSWERS_DIR}/${blind_id}.md"
   {
     echo "# タスク${task_no}"
     echo ""
