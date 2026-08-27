@@ -14,6 +14,13 @@
 #     - 検証後の「復元」作業が原理的に不要になる(そもそも何も変えていないため)
 #   という2つの利点が得られる。bin/restore.sh もこの前提に立っている(復元処理が不要になる)。
 #
+# 【fixture/.claude/settings.json の denyRead を毎回同期する理由】
+#   denyRead にはリポジトリの配置場所が値として入る。~/llm-bench 以外にcloneすると
+#   古いパスは何にもマッチせず、エラーも警告も出ないまま汚染防止が無効になる。
+#   answers/ は bin/hide-answers.sh が物理退避するので守られるが、results/(過去の回答)と
+#   reports/(採点済みの考察)は退避対象外のため、2回目以降の測定でモデルに読まれ得る。
+#   実際の配置場所から毎回組み立て直すことで、人間が手で直す必要をなくしている。
+#
 # 実行環境:
 #   - macOS(Darwin) / bin/bash 3.2.57 互換で書く(連想配列 declare -A は使わない)
 #   - sed -i はBSD系のため使わない(このスクリプトではjqとcatでのみJSONを書き換える)
@@ -54,6 +61,15 @@ readonly AUTO_COMPACT_RATIO="0.877"
 # Ollamaの既定値(5分)だとモデルがアンロードされて再ロード時間が発生し、
 # モデル間の比較が不公平になるため30分にしている(詳細はヘルプ参照)。
 readonly DEFAULT_KEEP_ALIVE="30m"
+
+# fixture セッションのBashから読み取りを禁止するディレクトリ(リポジトリルート基準)。
+# 正解セット・タスク文面・過去の測定結果・採点済みレポートが読めてしまうと、
+# 軸4の測定が汚染される。リポジトリをどこにcloneしても効くよう、
+# patch_settings_json() が実際の配置場所に合わせて毎回書き換える。
+readonly DENY_READ_REPO_DIRS=("answers" "tasks" "results" "reports" "docs" "bin")
+
+# リポジトリの配置場所に依存しない、固定の読み取り禁止パス。
+readonly DENY_READ_FIXED=("~/.ssh" "~/.gnupg")
 
 readonly SERVER_HOST="127.0.0.1"
 readonly SERVER_PORT="11434"
@@ -108,6 +124,32 @@ check_model_exists() {
 }
 
 # ファイルのタイムスタンプ付きバックアップを作成し、バックアップパスを標準出力に返す。
+# 絶対パスを、$HOME配下であれば "~/..." 形式に変換する(それ以外はそのまま返す)。
+# settings.json の denyRead は従来から "~/" 形式で記録されているため、その形式を維持する。
+to_home_relative() {
+  local path="$1"
+  case "${path}" in
+    "${HOME}")   echo "~" ;;
+    "${HOME}"/*) echo "~/${path#"${HOME}"/}" ;;
+    *)           echo "${path}" ;;
+  esac
+}
+
+# リポジトリの実際の配置場所から denyRead 配列を組み立て、JSON配列として出力する。
+# これにより ~/llm-bench 以外にcloneしても読み取り禁止が正しく効く。
+build_deny_read_json() {
+  local root_rel path dir
+  root_rel="$(to_home_relative "${BENCH_ROOT}")"
+  {
+    for path in "${DENY_READ_FIXED[@]}"; do
+      echo "${path}"
+    done
+    for dir in "${DENY_READ_REPO_DIRS[@]}"; do
+      echo "${root_rel}/${dir}"
+    done
+  } | jq -Rn '[inputs]'
+}
+
 backup_file() {
   local file="$1"
   local ts backup
@@ -117,22 +159,41 @@ backup_file() {
   echo "${backup}"
 }
 
-# fixture/.claude/settings.json をjqで3キーのみパッチする(dry-runの場合は表示のみ)。
-# 他のキー(特にpermissions/sandbox)には一切触れない。
+# fixture/.claude/settings.json をjqで4キーのみパッチする(dry-runの場合は表示のみ)。
+# 対象は .model / .env の2つ / .sandbox.filesystem.denyRead で、
+# 他のキー(特に permissions と sandbox の他の項目)には一切触れない。
+#
+# denyRead を毎回書き換えるのは、リポジトリの配置場所が値に入るためである。
+# ~/llm-bench 以外にcloneすると古いパスは何にもマッチせず、エラーも警告も出ないまま
+# 正解セットや過去のレポートが読める状態になる。実際の配置場所から組み立て直すことで、
+# 人間が手で直す必要をなくしている。
+#
 # 書き戻す前に、JSONとして妥当か・重要キーが失われていないか・意図した値になっているかを
 # 事後検証し、1つでも失敗したら書き戻さずバックアップから復元してエラー終了する。
 patch_settings_json() {
   local model="$1" max_tokens="$2" auto_compact="$3" dry_run="$4"
   local tmp old_model old_max old_auto settings_backup
+  local new_deny old_deny deny_changed="false"
 
   old_model="$(jq -r '.model // "null"' "${SETTINGS_JSON}")"
   old_max="$(jq -r '.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS // "null"' "${SETTINGS_JSON}")"
   old_auto="$(jq -r '.env.CLAUDE_CODE_AUTO_COMPACT_WINDOW // "null"' "${SETTINGS_JSON}")"
 
+  new_deny="$(build_deny_read_json | jq -c .)"
+  old_deny="$(jq -c '.sandbox.filesystem.denyRead // []' "${SETTINGS_JSON}")"
+  [[ "${new_deny}" != "${old_deny}" ]] && deny_changed="true"
+
   if [[ "${dry_run}" == "true" ]]; then
     echo "  [dry-run] .model: ${old_model} -> ${model}"
     echo "  [dry-run] .env.CLAUDE_CODE_MAX_CONTEXT_TOKENS: ${old_max} -> ${max_tokens}"
     echo "  [dry-run] .env.CLAUDE_CODE_AUTO_COMPACT_WINDOW: ${old_auto} -> ${auto_compact}"
+    if [[ "${deny_changed}" == "true" ]]; then
+      echo "  [dry-run] .sandbox.filesystem.denyRead をリポジトリの配置場所に合わせて更新します"
+      echo "  [dry-run]   変更前: ${old_deny}"
+      echo "  [dry-run]   変更後: ${new_deny}"
+    else
+      echo "  [dry-run] .sandbox.filesystem.denyRead: 変更なし(配置場所と一致)"
+    fi
     return 0
   fi
 
@@ -145,7 +206,11 @@ patch_settings_json() {
     --arg model "${model}" \
     --arg max_tokens "${max_tokens}" \
     --arg auto_compact "${auto_compact}" \
-    '.model = $model | .env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = $max_tokens | .env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = $auto_compact' \
+    --argjson deny_read "${new_deny}" \
+    '.model = $model
+     | .env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = $max_tokens
+     | .env.CLAUDE_CODE_AUTO_COMPACT_WINDOW = $auto_compact
+     | .sandbox.filesystem.denyRead = $deny_read' \
     "${SETTINGS_JSON}" > "${tmp}"
 
   local fail_reason=""
@@ -157,6 +222,12 @@ patch_settings_json() {
     fail_reason=".sandbox キーが失われています"
   elif [[ "$(jq -r '.model' "${tmp}")" != "${model}" ]]; then
     fail_reason=".model が意図した値になっていません"
+  elif [[ "$(jq --arg p "$(to_home_relative "${BENCH_ROOT}")/answers" \
+             '(.sandbox.filesystem.denyRead // []) | index($p) != null' "${tmp}")" != "true" ]]; then
+    # 正解セットのパスが denyRead に入っていなければ、汚染防止が効かない状態になる。
+    fail_reason=".sandbox.filesystem.denyRead に answers ディレクトリが含まれていません"
+  elif [[ "$(jq '.sandbox.filesystem | has("denyWrite")' "${tmp}")" != "true" ]]; then
+    fail_reason=".sandbox.filesystem.denyWrite キーが失われています"
   fi
 
   if [[ -n "${fail_reason}" ]]; then
@@ -173,6 +244,12 @@ patch_settings_json() {
   echo "  .model: ${old_model} -> ${model}"
   echo "  .env.CLAUDE_CODE_MAX_CONTEXT_TOKENS: ${old_max} -> ${max_tokens}"
   echo "  .env.CLAUDE_CODE_AUTO_COMPACT_WINDOW: ${old_auto} -> ${auto_compact}"
+  if [[ "${deny_changed}" == "true" ]]; then
+    echo "  .sandbox.filesystem.denyRead: リポジトリの配置場所(${BENCH_ROOT})に合わせて更新しました"
+    echo "    -> ${new_deny}"
+  else
+    echo "  .sandbox.filesystem.denyRead: 変更なし(配置場所と一致)"
+  fi
 }
 
 # 指定ホスト:ポートでOllamaサーバーが応答可能かを確認する

@@ -104,7 +104,7 @@ claude --permission-mode auto
 }
 ```
 
-> **注意**: 上記は`model`/`env`の該当部分のみを抜き出した差分です。ファイル全体をこの内容で置き換えないこと。`permissions`(allow/deny)や`sandbox`等の他の設定は必ずそのまま残してください(これらを失うと外部通信の制限が丸ごと外れます)。`bin/prepare.sh`自身もこの3キーのみをパッチするため、他の設定を書き換えることはない。
+> **注意**: 上記は`model`/`env`の該当部分のみを抜き出した差分です。ファイル全体をこの内容で置き換えないこと。`permissions`(allow/deny)や`sandbox`等の他の設定は必ずそのまま残してください(これらを失うと外部通信の制限が丸ごと外れます)。`bin/prepare.sh`自身も`model`/`env`の2キー/`sandbox.filesystem.denyRead`のみをパッチするため、他の設定を書き換えることはない。
 
 このリポジトリはベンチマーク専用に`fixture/`として用意されたものであり、実プロダクト環境そのものではない。そのため、ここで確認する値は「検証開始時点の初期値」であって「検証完了後に戻すべき本番値」ではない点に注意する(`bin/restore.sh`はこの値を復元しない設計になっている。詳細はフェーズE参照)。`model` / `CLAUDE_CODE_MAX_CONTEXT_TOKENS` / `CLAUDE_CODE_AUTO_COMPACT_WINDOW`の3つは常にセットで揃える必要があり、検証中はモデルを切り替えるたびに手順10の`bin/prepare.sh`がこの3つをまとめて書き換える。
 
@@ -273,7 +273,7 @@ PHPで、メールアドレスを検証するバリデータクラスを1つ書�
 
 `model`に渡す名前は`ollama run`で使うタグ名(`gemma4:26b`等)をそのまま使う。
 
-> **注意**: `fixture/.claude/settings.json`の書き換えは、スクリプトが`jq`で`model`/`CLAUDE_CODE_MAX_CONTEXT_TOKENS`/`CLAUDE_CODE_AUTO_COMPACT_WINDOW`の3キーのみをパッチし、書き換え前に`fixture/.claude/settings.json.bak.<timestamp>`へバックアップを作成したうえで、書き換え後に`permissions`(allow/deny)や`sandbox`等の他設定が失われていないか・`model`が正しく反映されているかを検証する。問題があればバックアップから復元して中断するため、手動編集時代に最も注意が必要だった「他設定を丸ごと失う事故」は起きない。また、指定したモデルが`ollama list`に無い場合はタイプミスとしてエラーで停止する(`ollama`コマンド自体が使えない環境では警告のみで続行する)。
+> **注意**: `fixture/.claude/settings.json`の書き換えは、スクリプトが`jq`で`model`/`CLAUDE_CODE_MAX_CONTEXT_TOKENS`/`CLAUDE_CODE_AUTO_COMPACT_WINDOW`/`sandbox.filesystem.denyRead`の4キーのみをパッチし、書き換え前に`fixture/.claude/settings.json.bak.<timestamp>`へバックアップを作成したうえで、書き換え後に`permissions`(allow/deny)や`sandbox`の他設定が失われていないか・`model`が正しく反映されているか・`denyRead`に`answers/`が含まれているかを検証する。`denyRead`はリポジトリの配置場所が値に入るため、実際の配置場所から毎回組み立て直す(`~/llm-bench`以外にcloneしても手直し不要)。問題があればバックアップから復元して中断するため、手動編集時代に最も注意が必要だった「他設定を丸ごと失う事故」は起きない。また、指定したモデルが`ollama list`に無い場合はタイプミスとしてエラーで停止する(`ollama`コマンド自体が使えない環境では警告のみで続行する)。
 
 ### 手順11(人間)既存の`ollama serve`の扱いを理解する
 
