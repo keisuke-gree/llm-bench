@@ -52,7 +52,7 @@ VRAMがこれより少ない環境では、`bin/prepare.sh`がウォームアッ
 |---|---|---|
 | `gemma4:26b` | 18.0 GB | 17 GB(コンテキスト長262144でも) |
 | `qwen3-coder:30b` | 18.6 GB | 25 GB(コンテキスト長131072) |
-| `qwen3.8:27b` | 17.7 GB | 未測定 |
+| `qwen3.8:27b` | 17.7 GB | 17〜18 GB(262144では20GBでCPUに溢れる) |
 
 **ディスクサイズとVRAM消費は別の数字です。** VRAMのほうがコンテキスト長に応じて
 増えるため、実際の制約になるのは常にVRAM側です。
@@ -63,6 +63,12 @@ VRAMがこれより少ない環境では、`bin/prepare.sh`がウォームアッ
 llm-bench/
 ├── README.md               このファイル
 ├── .gitignore
+├── .claude/                ベンチマークを回す側の設定(後述の「設定ファイルが2つある理由」)
+│   ├── settings.json       permissions と sandbox。auto mode で起動して使う
+│   └── skills/
+│       ├── benchmark-run/SKILL.md     測定〜採点〜レポートを通しで実行する工程
+│       ├── benchmark-score/SKILL.md   軸3・4の採点手順
+│       └── benchmark-report/SKILL.md  レポート生成と考察の手順
 ├── fixture/                 検証対象のコードベース(エージェントはここで起動する)
 │   ├── .claude/settings.json
 │   ├── CLAUDE.md
@@ -105,10 +111,10 @@ llm-bench/
 
 ## 典型的な作業フロー
 
-**人間がやることは2つだけです。** ①対象モデルを`ollama pull`で取得しておくこと、
+**人間がやることは3つです。** ①対象モデルを`ollama pull`で取得しておくこと、
 ②リポジトリの**ルートディレクトリ**でClaude Codeを起動し、`benchmark-run` Skillを
-呼ぶこと。軸1〜4の測定・実行・採点・レポート生成は`benchmark-run` Skillが自動で
-通しで実行します。
+呼ぶこと、③最後に出てきたスコアと考察が実測値と整合しているかを確認すること。
+軸1〜4の測定・実行・採点・レポート生成は`benchmark-run` Skillが自動で通しで実行します。
 
 ```bash
 ollama pull <model名>                        # 未取得のモデルがあれば(人間が実行)
@@ -159,7 +165,7 @@ claude --permission-mode auto                # リポジトリのルートディ
 `benchmark-run` Skillは内部で以下を順に実行します(詳細は
 `.claude/skills/benchmark-run/SKILL.md`を参照)。
 
-1. 対象モデルが`ollama list`にあるか確認する(無ければ停止して人間に取得を促す)
+1. 対象モデルを確定する(依頼文にモデル名が無ければ既定の3モデル)
 2. `./bin/sweep.sh`で軸1・2(生成速度・実用的なコンテキスト上限)を自動測定する
 3. `./bin/hide-answers.sh --hide`で正解セットを物理的に退避する(**必須**。詳細は
    後述の「正解セットへのアクセス制御の実態」を参照)
@@ -441,8 +447,10 @@ Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています
 | `bin/sweep.sh` | 軸1・2(生成速度・実用的なコンテキスト上限)を全モデル×全コンテキスト長で自動測定する |
 | `bin/new-report.sh` | `reports/_template.html`から日付入りのレポートファイルを`reports/`配下に生成する |
 
-各スクリプトは`--help`で詳しい使い方を確認できます。`bin/prepare.sh`は`--dry-run`で
-実際の書き込み無しに変更内容だけを確認できます。
+各スクリプトは`--help`で詳しい使い方を確認できます。`bin/prepare.sh`と`bin/sweep.sh`は
+`--dry-run`を持ち、前者は実際の書き込み無しに変更内容だけを、後者は測定を1件も
+実行せずに実行計画(対象の組数・サーバー再起動回数)だけを確認できます。
+12通り・数時間かかる測定を始める前に、対象が意図どおりか確かめられます。
 
 ## 詳しいドキュメント
 
