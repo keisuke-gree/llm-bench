@@ -26,9 +26,16 @@
 #   - sed -i はBSD系のため使用しない(このスクリプトでは sed -i は使わない)
 #   - jq は /usr/bin/jq を想定するが、本スクリプトでは jq を必須にしない
 #
-# 注意: 本スクリプトはClaude Codeのエージェント経由では動作しない
-#      (サンドボックスのlocalhost遮断によりollamaコマンドが使えないため)。
-#      人間が通常のターミナルから直接実行すること。
+# 実行方法:
+#   人間が通常のターミナルから直接実行するか、リポジトリのルートで起動した
+#   Claude Codeのセッションから `benchmark-run` Skill経由で実行する。
+#
+# 注意: Claude Codeのセッションから実行する場合、`auto mode` が必要になる。
+#      このスクリプトは `ollama serve` でポートをbind(listen)するが、
+#      サンドボックスがbindを拒否するため(`bind: operation not permitted`)、
+#      サンドボックス外での実行が必要になる。`sandbox.network.allowedDomains` は
+#      外向きの接続にのみ適用され、bindには効かないことを実測で確認済み。
+#      `auto mode` ならサンドボックス解除の確認が自動処理されて通る。
 
 set -euo pipefail
 

@@ -27,6 +27,7 @@ readonly RESULTS_DIR="${BENCH_ROOT}/results"
 readonly PID_FILE="${RESULTS_DIR}/.ollama.pid"
 
 readonly STOP_TIMEOUT_SEC=30
+readonly SERVER_PORT="11434"   # Ollamaが待ち受けるポート
 
 # ============================================================
 # メイン処理
@@ -61,6 +62,43 @@ do_restore() {
 
     rm -f "${PID_FILE}"
     echo "  ${PID_FILE} を削除しました。"
+  fi
+
+  # PIDファイルに記録されていないサーバーが残っていないか確認する。
+  #
+  # なぜこの確認が必要か:
+  #   bin/prepare.sh が起動したサーバーはPIDが記録されるが、それ以外の経路で
+  #   起動されたサーバー(手で `ollama serve` を叩いた、エージェントが即興で
+  #   起動した等)は記録されないため、PIDファイルだけを見ていると取りこぼす。
+  #   実際に記録外のサーバーが残り、次回の測定に干渉しかけた事例がある。
+  #   このスクリプトの目的は「ベンチマーク用のサーバーを一つも残さないこと」
+  #   なので、ポートを直接見て確認する。
+  echo ""
+  echo "=== 記録外のサーバーが残っていないか確認します ==="
+  local stray_pids
+  stray_pids="$(lsof -nP -iTCP:"${SERVER_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)"
+
+  if [[ -z "${stray_pids}" ]]; then
+    echo "  ポート ${SERVER_PORT} を待ち受けているプロセスはありません。"
+  else
+    echo "  ポート ${SERVER_PORT} を待ち受けているプロセスが残っています: ${stray_pids}"
+    echo "  bin/prepare.sh 以外の経路で起動されたサーバーと判断し、停止します。"
+    local p
+    for p in ${stray_pids}; do
+      kill "${p}" 2>/dev/null || true
+    done
+
+    local waited=0
+    while [[ -n "$(lsof -nP -iTCP:"${SERVER_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)" ]]; do
+      if [ "${waited}" -ge "${STOP_TIMEOUT_SEC}" ]; then
+        echo "警告: 停止がタイムアウトしました。手動で確認してください:" >&2
+        echo "         lsof -nP -iTCP:${SERVER_PORT} -sTCP:LISTEN" >&2
+        break
+      fi
+      sleep 1
+      waited=$((waited + 1))
+    done
+    echo "  停止しました。"
   fi
 
   echo ""

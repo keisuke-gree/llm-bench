@@ -1,14 +1,7 @@
 {
   "sandbox": {
     "enabled": true,
-    "failIfUnavailable": true,
-    "network": {
-      "allowedDomains": [
-        "127.0.0.1:11434",
-        "[::1]:11434",
-        "localhost:11434"
-      ]
-    }
+    "failIfUnavailable": true
   },
   "permissions": {
     "allow": [

@@ -83,6 +83,19 @@ claude                  # リポジトリのルートディレクトリで起動
 # セッション内で「benchmark-run Skillでベンチマークを実行して」等と依頼する
 ```
 
+> **`auto mode`で実行してください。** `bin/`配下のスクリプトは`ollama serve`で
+> ポートをbind(listen)しますが、**サンドボックスはbindを拒否します**
+> (`Error: listen tcp 127.0.0.1:11434: bind: operation not permitted`)。
+> `sandbox.network.allowedDomains`で許可しても解決しません
+> (あの設定は外向きの接続にのみ適用され、bindには効かないことを実測で確認済み)。
+> 加えて、エージェントが組み立てる複合コマンド(パイプやリダイレクトを含むもの)は
+> `permissions.allow`で事前に列挙し尽くせません。`auto mode`ならこれらの確認が
+> 自動処理されて通ります。
+>
+> **測定される側(`fixture/`)は`auto mode`の影響を受けません。** あちらは
+> `allowUnsandboxedCommands: false`でサンドボックスを外す経路自体が無く、
+> 外部通信も`ollama`の実行もできません。
+
 `benchmark-run` Skillは内部で以下を順に実行します(詳細は
 `.claude/skills/benchmark-run/SKILL.md`を参照)。
 
