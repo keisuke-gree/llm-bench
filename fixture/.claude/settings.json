@@ -4,11 +4,11 @@
     "ANTHROPIC_BASE_URL": "http://localhost:11434",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL": "1",
-    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "131072",
-    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "115000"
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "262144",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "230000"
   },
   "claudeMdExcludes": [
-    "~/.claude/CLAUDE.md"
+    "**/.claude/CLAUDE.md"
   ],
   "sandbox": {
     "enabled": true,
@@ -26,7 +26,7 @@
       ]
     }
   },
-  "model": "qwen3-coder:30b",
+  "model": "gemma4:26b",
   "disableAllHooks": false,
   "disableClaudeAiConnectors": true,
   "permissions": {

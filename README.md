@@ -134,13 +134,20 @@ llm-bench/
 このファイルには次の設定が入っています。
 
 ```json
-"claudeMdExcludes": ["~/.claude/CLAUDE.md"]
+"claudeMdExcludes": ["**/.claude/CLAUDE.md"]
 ```
 
 これはユーザー個人の`~/.claude/CLAUDE.md`をこのベンチマークのコンテキストから除外する
-ための設定です。効いているかどうかは、`fixture/`でClaude Codeを起動して`/context`を
-実行し、`Memory files`に`CLAUDE.md`が**1件だけ**計上されていることで確認できます。
-**2件計上される場合はチルダ展開が効いていない**ので、`"**/.claude/CLAUDE.md"`に変更してください。
+ための設定です。除外する理由は、そこに書かれた指示（「検索は`rg`に統一する」等のツール使用規則）が
+**軸3で測定するツール選択の挙動を左右してしまう**ためです。各自の個人設定によって結果が変わると、
+モデル間の比較が成立しません。
+
+`claudeMdExcludes`は絶対パスへのglobマッチで、**チルダ展開は効きません**（`"~/.claude/CLAUDE.md"`
+と書いても除外されないことを実測で確認済み）。個人名を含まない形にするため`**/`を使っています。
+
+効いているかどうかは、`fixture/`でClaude Codeを起動して`/context`を実行し、`Memory files`に
+`CLAUDE.md`が**1件だけ**（`fixture/CLAUDE.md`のみ）計上されていることで確認できます。
+`~/.claude/CLAUDE.md`が併記されている場合は除外できていません。
 
 ## フィクスチャを公開しないこと
 
