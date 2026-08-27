@@ -1,0 +1,42 @@
+{
+  "sandbox": {
+    "enabled": false
+  },
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Bash(./bin/prepare.sh *)",
+      "Bash(./bin/sweep.sh *)",
+      "Bash(./bin/run-tasks.sh *)",
+      "Bash(./bin/hide-answers.sh *)",
+      "Bash(./bin/record.sh *)",
+      "Bash(./bin/score.sh *)",
+      "Bash(./bin/new-report.sh *)",
+      "Bash(./bin/restore.sh *)",
+      "Bash(ollama list)",
+      "Bash(ollama ps)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(rg *)",
+      "Bash(fd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Grep",
+      "Glob"
+    ],
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(rm *)",
+      "Bash(git push *)",
+      "Read(.env*)",
+      "Read(**/.ssh/*)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Edit(.env*)"
+    ]
+  }
+}
