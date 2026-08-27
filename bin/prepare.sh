@@ -25,8 +25,10 @@
 #   - macOS(Darwin) / bin/bash 3.2.57 互換で書く(連想配列 declare -A は使わない)
 #   - sed -i はBSD系のため使わない(このスクリプトではjqとcatでのみJSONを書き換える)
 #   - jq は /usr/bin/jq を想定
-#   - 人間が通常のターミナルから実行する想定。Claude Codeのエージェント経由では、
-#     サンドボックスのlocalhost遮断によりollamaコマンドが使えないため動作しない。
+#   - 実行者は、人間(通常のターミナル)か、リポジトリのルートで auto mode で起動した
+#     Claude Codeのセッション(benchmark-run Skillの手順4)のいずれか。
+#     auto mode でないセッションからは、サンドボックスが ollama serve のbindを
+#     拒否するため動作しない。
 #
 # 実行場所: このリポジトリのルートディレクトリ(相対パスはスクリプト自身の位置から解決する)。
 #
@@ -58,26 +60,6 @@ readonly WARMUP_TIMEOUT_SEC=180        # ウォームアップの最大待ち秒
 # ============================================================
 # ユーティリティ関数
 # ============================================================
-
-# 指定したモデル名がollamaにpull済みかどうかを`ollama list`で検証する。
-# `ollama list`自体が失敗した場合(サーバー未起動、ollamaコマンドが無い等)は、
-# サーバー停止中でも準備を進められるように警告のみで続行する。
-check_model_exists() {
-  local model="$1"
-  local list_output
-  if ! list_output="$(ollama list 2>/dev/null)"; then
-    echo "警告: 'ollama list' の実行に失敗したため、モデル名の検証をスキップしました。" >&2
-    echo "      ('ollama serve' が起動していない、または 'ollama' コマンドが見つからない可能性があります)" >&2
-    return 0
-  fi
-
-  if ! echo "${list_output}" | awk 'NR>1 {print $1}' | grep -Fxq -- "${model}"; then
-    echo "エラー: モデル '${model}' は 'ollama list' の一覧に見つかりませんでした。" >&2
-    echo "        モデル名が正しいか確認してください。'ollama list' で確認できます。" >&2
-    echo "        未取得の場合は 'ollama pull ${model}' で取得してください。" >&2
-    exit 1
-  fi
-}
 
 # リポジトリの実際の配置場所から denyRead 配列を組み立て、JSON配列として出力する。
 # これにより ~/llm-bench 以外にcloneしても読み取り禁止が正しく効く。
@@ -245,10 +227,12 @@ do_prepare() {
   echo "  CLAUDE_CODE_AUTO_COMPACT_WINDOW: ${auto_compact_window}"
   echo ""
 
-  # --- 2. モデルの存在確認 ---
-  echo "=== [2/7] モデルの存在確認 ==="
-  check_model_exists "${model}"
-  echo "  OK"
+  # --- 2. モデルの取得済み確認(一次) ---
+  # サーバー起動前でも効くディスク上のマニフェスト確認。未取得ならここで停止する。
+  # これより後の処理には `ollama run` があり、未取得だと自動でpullされてしまう。
+  echo "=== [2/7] モデルの取得済み確認 ==="
+  require_models_pulled "${model}"
+  echo "  OK(ディスク上のマニフェストを確認)"
   echo ""
 
   # --- 3. settings.json のパッチ ---
@@ -292,6 +276,9 @@ do_prepare() {
 
   # --- 7. ウォームアップと検証 ---
   echo "=== [7/7] ウォームアップと検証 ==="
+  # 二次チェック。サーバーが起動した今なら `ollama list` が使えるため、公式
+  # インタフェースで裏を取る。ウォームアップの `ollama run` より前に置くこと。
+  require_models_pulled "${model}"
   if ! timeout_run "${WARMUP_TIMEOUT_SEC}" ollama run "${model}" "warmup" >/dev/null 2>&1; then
     echo "エラー: ウォームアップ('ollama run ${model} \"warmup\"')に失敗またはタイムアウトしました。" >&2
     exit 1

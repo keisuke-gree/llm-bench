@@ -114,6 +114,85 @@ calc_auto_compact_window() {
 }
 
 # ============================================================
+# モデルの取得済み確認(自動pullの防止)
+# ============================================================
+
+# Ollamaのモデル格納ディレクトリ。OLLAMA_MODELS が設定されていればそれに従う。
+readonly OLLAMA_MODELS_DIR="${OLLAMA_MODELS:-${HOME}/.ollama/models}"
+
+# モデルがローカルに取得済みかを、ディスク上のマニフェストの有無で判定する。
+#
+# `ollama list` はサーバーが起動していないと失敗するため、サーバー起動前でも
+# 判定できる手段が必要になる。マニフェストのパスは
+#   <models>/manifests/<レジストリ>/<名前空間>/<モデル名>/<タグ>
+# という構成で、公式ライブラリのモデルは名前空間が library になる。
+model_is_pulled_on_disk() {
+  local model="$1" name tag manifest
+  name="${model%%:*}"
+  tag="${model##*:}"
+  # タグを省略した場合のOllamaの既定は latest
+  [[ "${tag}" == "${model}" ]] && tag="latest"
+
+  if [[ "${name}" == */* ]]; then
+    # user/model のように名前空間が明示されている場合
+    manifest="${OLLAMA_MODELS_DIR}/manifests/registry.ollama.ai/${name}/${tag}"
+  else
+    manifest="${OLLAMA_MODELS_DIR}/manifests/registry.ollama.ai/library/${name}/${tag}"
+  fi
+  [[ -f "${manifest}" ]]
+}
+
+# 指定した全モデルが取得済みであることを確認する。1つでも未取得ならエラー終了する。
+#
+# 【なぜこの確認が必須か】
+#   `ollama run <model>` は未取得のモデルを自動でネットワークから取得する。
+#   無人実行の途中で人間の確認を経ずにモデルがダウンロードされることになるため、
+#   すべての `ollama run` より前にここで弾く。
+#
+# 【二段で確認する理由】
+#   一次: ディスク上のマニフェスト。サーバー起動前でも効き、コストがゼロ。
+#   二次: `ollama list`。サーバーが応答する場合のみ実施し、公式インタフェースで
+#         裏を取る。一次がOllamaの内部構成変更で誤判定しても、こちらが捕まえる。
+#   一次が「取得済みなのに未取得」と誤る方向に転んだ場合は余計に停止するだけで、
+#   勝手にpullが走る経路は残らない。
+#
+# bash 3.2 では set -u 下で空配列の展開が失敗するため、未取得リストは
+# 空白区切りの文字列で持つ(モデル名に空白は含まれない)。
+require_models_pulled() {
+  local missing="" model list_output
+  for model in "$@"; do
+    if ! model_is_pulled_on_disk "${model}"; then
+      missing="${missing} ${model}"
+    fi
+  done
+
+  if [[ -z "${missing}" ]] && is_server_running; then
+    if list_output="$(ollama list 2>/dev/null)"; then
+      for model in "$@"; do
+        if ! echo "${list_output}" | awk 'NR>1 {print $1}' | grep -Fxq -- "${model}"; then
+          missing="${missing} ${model}"
+        fi
+      done
+    fi
+  fi
+
+  [[ -z "${missing}" ]] && return 0
+
+  echo "エラー: 以下のモデルが取得されていません。測定を開始しません。" >&2
+  for model in ${missing}; do
+    echo "        - ${model}" >&2
+  done
+  echo "" >&2
+  echo "        'ollama run' は未取得のモデルを自動でダウンロードします。" >&2
+  echo "        人間の確認を経ないネットワークアクセスを避けるため、ここで停止します。" >&2
+  echo "        取得する場合は、人間が別ターミナルで以下を実行してください:" >&2
+  for model in ${missing}; do
+    echo "          ollama pull ${model}" >&2
+  done
+  exit 1
+}
+
+# ============================================================
 # サーバーの状態確認
 # ============================================================
 
