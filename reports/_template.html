@@ -1,0 +1,343 @@
+<!--
+  レポート雛形(_template.html)
+
+  使い方:
+    1. bin/new-report.sh <スラグ> でこのファイルをコピーして日付入りのファイルを作る。
+       {{TITLE}} と {{DATE}} はスクリプトが自動で埋める。
+    2. benchmark-report Skill が results/ の実測値をもとに、残りのプレースホルダと
+       分析セクションの本文を埋める。
+
+  プレースホルダ一覧(すべて {{ }} 形式。文字列置換で埋める):
+    {{TITLE}}          レポートのタイトル。<title>と<h1>の両方に入る。
+    {{DATE}}           測定日。bin/new-report.sh が生成日を自動で入れる
+                       (実際の測定日と異なる場合はSkillが上書きする)。
+    {{MODELS}}         比較対象のモデル名一覧(例: <code>a</code> / <code>b</code>)。
+    {{AXIS12_TABLE}}   軸1(生成速度)・軸2(実用コンテキスト上限)の
+                       モデル×コンテキスト長マトリクス表(<table>ごと置換)。
+    {{AXIS34_TABLE}}   軸3(調査過程)・軸4(結論の正しさ)のスコア表(<table>ごと置換)。
+    {{WAITTIME_TABLE}} 実際の待ち時間(生成トークン数 ÷ eval rate)の表(<table>ごと置換)。
+
+  上記以外のセクション(結論の根拠、考察、限界など)は自由記述であり、
+  benchmark-report Skillが該当箇所を直接書き換える。
+-->
+<title>{{TITLE}}</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e0e0e0;
+    --accent: #1a5fb4;
+    --win-bg: #e8f5e9;
+    --win-fg: #1b5e20;
+    --lose-bg: #fdecea;
+    --lose-fg: #8b1a10;
+    --warn-bg: #fff8e1;
+    --warn-fg: #7a5300;
+    --code-bg: #f5f5f5;
+    --th-bg: #f0f0f0;
+    --tip-bg: #2b2b2b;
+    --tip-fg: #ffffff;
+    --tip-border: #2b2b2b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a;
+      --fg: #e6e6e6;
+      --muted: #9aa0a6;
+      --border: #2c3038;
+      --accent: #78aeff;
+      --win-bg: #1b3a22;
+      --win-fg: #a5e0b0;
+      --lose-bg: #3d1f1c;
+      --lose-fg: #f0a99f;
+      --warn-bg: #3a2f14;
+      --warn-fg: #e8cf8f;
+      --code-bg: #1c1f25;
+      --th-bg: #1f232a;
+      --tip-bg: #e6e6e6;
+      --tip-fg: #14161a;
+      --tip-border: #e6e6e6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a;
+    --fg: #e6e6e6;
+    --muted: #9aa0a6;
+    --border: #2c3038;
+    --accent: #78aeff;
+    --win-bg: #1b3a22;
+    --win-fg: #a5e0b0;
+    --lose-bg: #3d1f1c;
+    --lose-fg: #f0a99f;
+    --warn-bg: #3a2f14;
+    --warn-fg: #e8cf8f;
+    --code-bg: #1c1f25;
+    --th-bg: #1f232a;
+    --tip-bg: #e6e6e6;
+    --tip-fg: #14161a;
+    --tip-border: #e6e6e6;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    line-height: 1.75;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 5rem;
+    font-size: 15px;
+  }
+  h1 { font-size: 1.8rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 3rem 0 1rem;
+    padding-bottom: .4rem;
+    border-bottom: 2px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  .meta { color: var(--muted); font-size: .85rem; margin-bottom: 2.5rem; }
+  p { margin: .8rem 0; }
+
+  .verdict {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    background: var(--code-bg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+  }
+  .verdict h2 { margin: 0 0 .6rem; border: none; padding: 0; font-size: 1.15rem; }
+  .verdict strong { color: var(--accent); }
+
+  .scroll { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td {
+    border: 1px solid var(--border);
+    padding: .5rem .7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--th-bg); font-weight: 600; white-space: nowrap; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .win { background: var(--win-bg); color: var(--win-fg); font-weight: 600; }
+  .lose { background: var(--lose-bg); color: var(--lose-fg); }
+  .warn { background: var(--warn-bg); color: var(--warn-fg); }
+  caption { caption-side: bottom; color: var(--muted); font-size: .8rem; padding-top: .5rem; text-align: left; }
+
+  code {
+    background: var(--code-bg);
+    padding: .12em .4em;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .88em;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: .9rem 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .35rem 0; }
+  .note { color: var(--muted); font-size: .88rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* 用語ツールチップ（本文中の用語向け。表セルはtitle属性を使うためここでは対象外） */
+  .t {
+    border-bottom: 1px dotted var(--muted);
+    cursor: help;
+    position: relative;
+  }
+  .t:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  .t::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: 125%;
+    transform: translate(-50%, -4px);
+    width: max-content;
+    max-width: 320px;
+    background: var(--tip-bg);
+    color: var(--tip-fg);
+    border: 1px solid var(--tip-border);
+    padding: .55rem .75rem;
+    border-radius: 6px;
+    font-size: .82rem;
+    line-height: 1.5;
+    white-space: normal;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .12s ease;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .t:hover::after,
+  .t:focus::after {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .8rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  details dl { margin: 1rem 0 .2rem; }
+  details dt { font-weight: 600; margin-top: .9rem; }
+  details dt:first-child { margin-top: 0; }
+  details dd { margin: .2rem 0 0; color: var(--fg); }
+</style>
+
+<h1>{{TITLE}}</h1>
+<p class="meta">
+  対象: {{MODELS}}<br>
+  測定日: {{DATE}} ／ 環境: <!-- 実行環境(ハードウェア・VRAM実測値・使用ツール)を記載 -->
+</p>
+
+<!--
+  結論(推奨モデルとその根拠)をここに書く。
+  - 何を推奨するか、その決め手になった数値(スコア・所要時間など)を具体的に書く。
+  - 次点との比較(同点なら何が劣位判定の決め手になったか)も書く。
+-->
+<div class="verdict">
+  <h2>結論</h2>
+  <p><!-- 推奨モデルと根拠 --></p>
+</div>
+
+<!--
+  用語集: 本文・表で使うホバー説明を一箇所にまとめる。
+  以下は過去の検証で繰り返し登場した共通用語。今回の検証固有の用語
+  (フィクスチャ特有のクラス名や、タスクで使った専門用語など)があれば
+  <dt>/<dd> のペアをこの並びに追加する。
+  同じ用語は最初の出現箇所だけにツールチップを付ければよい(本文は
+  <span class="t" data-tip="...">、表セルは title 属性を使う。表は
+  overflow-x: auto の中にあるため CSS の吹き出しは切り取られる)。
+-->
+<details>
+  <summary>用語集(クリックで展開)</summary>
+  <dl>
+    <dt>eval rate</dt>
+    <dd>モデルが出力を生成する速度(1秒あたりのトークン数)。eval count ÷ eval duration で求まる。入力を読む速度とは別物で、体感速度を支配するのはこちら。</dd>
+    <dt>eval count</dt>
+    <dd>モデルが生成した出力のトークン数。実際の待ち時間は eval count ÷ eval rate で決まるため、速度だけ見ても待ち時間は分からない。</dd>
+    <dt>prompt eval rate</dt>
+    <dd>入力(プロンプト)を読み込む速度。全トークンを並列に処理できるため eval rate より速い。</dd>
+    <dt>トークン</dt>
+    <dd>モデルが文章を扱う最小単位。日本語なら1〜2文字、英語なら単語の一部程度に相当する。</dd>
+    <dt>tok/s</dt>
+    <dd>tokens per second。1秒あたりに生成できるトークン数。</dd>
+    <dt>コンテキスト長</dt>
+    <dd>モデルが一度に扱える入力と出力の合計トークン数の上限。これを超えると古い内容が失われる。</dd>
+    <dt>KVキャッシュ</dt>
+    <dd>生成の途中結果を保持するメモリ領域。コンテキストが長いほど大きくなり、VRAMを消費する。</dd>
+    <dt>VRAM</dt>
+    <dd>GPUが使えるメモリ。Apple Siliconでは本体メモリと共有される。</dd>
+    <dt>PROCESSOR</dt>
+    <dd>ollama ps が表示する列で、モデルがGPUとCPUのどちらで動いているかの比率。100% GPU が理想的な状態。</dd>
+    <dt>SIZE</dt>
+    <dd>ollama ps が表示する列で、そのモデルがメモリ上で占める大きさ。モデルの重みとKVキャッシュの合計。</dd>
+    <dt>CPU溢れ</dt>
+    <dd>モデルがVRAMに収まらず一部がCPU側で処理されること。オフロードとも呼び、速度が激減する。</dd>
+    <dt>MoE</dt>
+    <dd>Mixture-of-Experts。モデル内部を複数の「専門家」に分け、1トークンごとに一部だけを使う構造。総パラメータが大きくても計算量が少なく高速。</dd>
+    <dt>dense</dt>
+    <dd>MoEと対になる構造で、1トークンごとに全パラメータを使う。同じサイズならMoEより遅くなる。</dd>
+    <dt>メモリ帯域</dt>
+    <dd>メモリからデータを読み出せる速さ(GB/s)。denseモデルの速度上限を決める物理的な制約。</dd>
+    <dt>量子化</dt>
+    <dd>モデルの重みを低い精度に圧縮してサイズを小さくする技術。</dd>
+    <dt>thinkingモード</dt>
+    <dd>回答の前に思考過程を生成するモデルの動作。精度が上がることがあるが生成トークンが増えて時間がかかる。</dd>
+    <dt>auto-compact</dt>
+    <dd>会話がコンテキスト長の上限に近づいた際、Claude Codeが自動で要約して圧縮する機能。</dd>
+    <dt>デコイ</dt>
+    <dd>ベンチマークで意図的に仕込んだ「正解に見えるが正解ではないもの」。判別能力を測るための罠。</dd>
+    <dt>幻覚</dt>
+    <dd>hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。</dd>
+    <dt>学習データ汚染</dt>
+    <dd>評価に使うコードがモデルの学習データに含まれており、実際には調査せず記憶で答えられてしまう問題。</dd>
+    <dt>rg</dt>
+    <dd>ripgrep。高速な文字列検索コマンド。</dd>
+    <dt>fd</dt>
+    <dd>高速なファイル探索コマンド。</dd>
+    <dt>テンプレートトークン</dt>
+    <dd>モデルが内部的に使う制御記号。出力に漏れると表示が壊れたり、ツール呼び出しが失敗する。</dd>
+    <!-- 今回の検証固有の用語があればここに追加 -->
+  </dl>
+</details>
+
+<h2>1. 検証の設計</h2>
+
+<p><!-- 4軸の測り方、フィクスチャの構成、タスクの内容などを記載 --></p>
+
+<h3>タスクの内容</h3>
+<ol>
+  <!-- tasks/tasks.md のタスク一覧を要約して記載 -->
+</ol>
+
+<h2>2. 軸3・4: スコアと考察</h2>
+
+<p><!-- モデルごとの傾向、タスク間で差がついた要因などの考察を記載 --></p>
+
+<!-- {{AXIS34_TABLE}}: 軸3(調査の過程)・軸4(結論の正しさ)のタスク別スコア表。scores.tsvとmapping.tsvから作成する -->
+{{AXIS34_TABLE}}
+
+<p class="note"><!-- 「軸3と軸4を分けて論じる」考察: 過程の質は問題が易しいうちは結果に表れないという性質を踏まえて記載 --></p>
+
+<h2>3. 所要時間</h2>
+
+<p><!-- eval rateだけでなくeval countを掛け合わせた実際の待ち時間についての考察を記載 --></p>
+
+<!-- {{WAITTIME_TABLE}}: 実際の待ち時間(生成トークン数 ÷ eval rate)の表 -->
+{{WAITTIME_TABLE}}
+
+<h2>4. 軸1・2: 測定値</h2>
+
+<p><!-- 速度・実用コンテキスト上限の傾向を記載 --></p>
+
+<!-- {{AXIS12_TABLE}}: 軸1・2のモデル×コンテキスト長マトリクス表(benchmark-results-*.mdから転記) -->
+{{AXIS12_TABLE}}
+
+<h2>5. 付随的に判明した技術的事実</h2>
+
+<h3>アーキテクチャの推定(メモリ帯域からの逆算)</h3>
+
+<p>
+  <!--
+    SIZE × tok/s を計算し、実機の実効メモリ帯域(Apple Silicon M5 Maxで500〜600 GB/s程度)と比較する。
+    実効帯域と概ね一致するならdense(帯域律速)、大きく超える(2倍以上)ならMoE(全重みを読んでいない証拠)。
+  -->
+</p>
+
+<h3>thinkingモードの扱い</h3>
+
+<p><!-- --think false との比較データがあれば記載。無ければ「未測定」と明記する --></p>
+
+<h2>6. この検証の限界</h2>
+
+<ul>
+  <!-- 合成コードである点、規模、実施回数などの限界を記載。データが無い項目は「未測定」と明記する -->
+</ul>
+
+<hr>
+
+<h2>推奨アクション</h2>
+
+<ol>
+  <!-- 推奨モデルへの切り替え手順、設定更新など -->
+</ol>

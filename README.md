@@ -34,18 +34,24 @@ llm-bench/
 ├── bin/                    自動化スクリプト
 │   ├── prepare.sh          モデルの切り替え〜サーバー起動・検証
 │   ├── record.sh           軸3・4の回答をブラインドなファイル名で払い出す
+│   ├── score.sh            軸3・4のスコアをブラインドIDのまま記録する
 │   ├── restore.sh          検証環境の片付け
-│   └── sweep.sh            軸1・2の自動スイープ測定
-├── docs/
+│   ├── sweep.sh            軸1・2の自動スイープ測定
+│   └── new-report.sh       雛形から日付入りのレポートファイルを生成する
+├── docs/                   使い方のドキュメント
 │   ├── runbook.md          実行手順書(コマンドをコピペしながら進める用)
 │   ├── spec.md             設計仕様書(なぜそう測るか・なぜその基準か)
 │   └── setup.md            このベンチマーク環境自体の使い方の詳細
+├── reports/                測定結果とその考察(レポートHTML)
+│   ├── README.md           レポート索引
+│   ├── _template.html      レポートの雛形(bin/new-report.shが使う)
+│   └── YYYY-MM-DD-<スラグ>.html  日付入りの個別レポート
 ├── tasks/
 │   └── tasks.md            軸3・4で使うタスク文面(Claude Codeに貼り付ける)
 ├── answers/
 │   └── answers.md          正解セットと採点用の情報
 └── results/
-    └── .gitkeep            結果ファイル・回答・対応表の出力先(共有しない)
+    └── .gitkeep            結果ファイル・回答・対応表・スコアの出力先(共有しない)
 ```
 
 ### `answers/` と `tasks/` を `fixture/` の外に置いている理由
@@ -94,9 +100,18 @@ llm-bench/
 
    `answers/answers.md`の正解セットと、`results/answers/`配下の回答ファイルを突き合わせて
    採点します。`results/mapping.tsv`(どのファイルがどのモデルかの対応表)は採点時には
-   参照しないでください(ブラインド採点のため)。
+   参照しないでください(ブラインド採点のため)。この作業は`benchmark-score` Skillに
+   任せられます。採点結果は`./bin/score.sh <ブラインドID> --axis3 <0-5> --axis4 <0-5>`で
+   `results/scores.tsv`に記録します(ブラインドIDのまま記録し、モデル名の解決はレポート
+   生成時に行います)。
 
-6. **片付ける**
+6. **レポートを作る**
+
+   `./bin/new-report.sh <スラグ>`で`reports/`配下に日付入りのレポートファイルを生成し、
+   `benchmark-report` Skillで`results/`の実測値とスコアを転記・分析します。
+   詳細は`reports/README.md`を参照してください。
+
+7. **片付ける**
 
    ```bash
    ./bin/restore.sh
@@ -161,8 +176,10 @@ llm-bench/
 |---|---|
 | `bin/prepare.sh` | モデル名の解決・存在確認・`fixture/.claude/settings.json`のパッチ・`ollama serve`の起動・ウォームアップと検証(100% GPUか等)までを1コマンドで行う |
 | `bin/record.sh` | 現在のモデルを`fixture/.claude/settings.json`から自動で読み取り、軸3・4の回答をランダムなブラインドIDのファイルとして払い出す |
+| `bin/score.sh` | 軸3・4のスコアをブラインドIDのまま`results/scores.tsv`に記録する(`results/mapping.tsv`は参照しない) |
 | `bin/restore.sh` | `bin/prepare.sh`が起動した`ollama serve`を停止し、検証環境を片付ける |
 | `bin/sweep.sh` | 軸1・2(生成速度・実用的なコンテキスト上限)を全モデル×全コンテキスト長で自動測定する |
+| `bin/new-report.sh` | `reports/_template.html`から日付入りのレポートファイルを`reports/`配下に生成する |
 
 各スクリプトは`--help`で詳しい使い方を確認できます。`bin/prepare.sh`は`--dry-run`で
 実際の書き込み無しに変更内容だけを確認できます。
@@ -171,7 +188,7 @@ llm-bench/
 
 - 実行手順を上から順に進めたい場合は `docs/runbook.md` を参照してください。
 - 「なぜこの4軸で測るのか」「なぜこの採点基準なのか」等の設計根拠は `docs/spec.md` を参照してください。
-- 実際に測定した結果とその考察は `docs/report.html` を参照してください（ブラウザで開いてください。専門用語はホバーで説明が出ます）。3モデルの比較、アーキテクチャ（MoE/dense）による速度差の分析、ハードウェア投資が解決策になるかの検討を含みます。
+- 実際に測定した結果とその考察は `reports/` 配下のレポートを参照してください（ブラウザで開いてください。専門用語はホバーで説明が出ます）。索引は `reports/README.md` にあります。最新のレポート（`reports/2026-08-27-initial-comparison.html`）は3モデルの比較、アーキテクチャ（MoE/dense）による速度差の分析、ハードウェア投資が解決策になるかの検討を含みます。
 - このベンチマーク環境(`fixture/`のコードベースやタスクの設計意図)自体について詳しく知りたい場合は
   `docs/setup.md` を参照してください。
 
