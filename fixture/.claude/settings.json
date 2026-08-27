@@ -21,7 +21,13 @@
     "filesystem": {
       "denyRead": [
         "~/.ssh",
-        "~/.gnupg"
+        "~/.gnupg",
+        "~/llm-bench/answers",
+        "~/llm-bench/tasks",
+        "~/llm-bench/results",
+        "~/llm-bench/reports",
+        "~/llm-bench/docs",
+        "~/llm-bench/bin"
       ],
       "denyWrite": [
         "~/.claude/settings.json",
@@ -52,14 +58,6 @@
       "Bash(ollama run *)"
     ],
     "deny": [
-      "Read(**/answers/**)",
-      "Read(**/answers.md)",
-      "Read(**/tasks/**)",
-      "Read(**/results/**)",
-      "Read(**/reports/**)",
-      "Read(**/*.tsv)",
-      "Read(**/bin/**)",
-      "Read(**/docs/**)",
       "mcp__*",
       "WebSearch",
       "WebFetch",
