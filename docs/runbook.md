@@ -52,6 +52,16 @@ Skillを呼ぶことの2つだけになる。Skillが自動化する内容の詳
 | レポートの生成と考察 | **エージェント**(`benchmark-report` Skill) |
 | 結果の妥当性の確認 | **人間**(スコアと考察が実測値と整合しているかを最後に確認する) |
 
+### `auto mode` の指定方法
+
+```bash
+claude --permission-mode auto
+```
+
+起動後に切り替える場合は、セッション内で`Shift+Tab`を押すとモードが順に切り替わり、`auto`を選べます。
+
+**`.claude/settings.json`の`permissions.defaultMode`では指定できません。** `auto`はプロジェクトスコープの設定では付与できず、無視された上でユーザー設定のモードを覆い隠します。そのため設定ファイルには書かず、起動時に毎回指定します。
+
 ### `auto mode` が必要な理由
 
 `bin/`配下のスクリプトは`ollama serve`でポートをbind(listen)します。**サンドボックスはbindを拒否するため**(`Error: listen tcp 127.0.0.1:11434: bind: operation not permitted`)、サンドボックス外での実行が必要になります。

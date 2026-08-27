@@ -78,12 +78,34 @@ llm-bench/
 通しで実行します。
 
 ```bash
-ollama pull <model名>   # 未取得のモデルがあれば(人間が実行)
-claude                  # リポジトリのルートディレクトリで起動
-# セッション内で「benchmark-run Skillでベンチマークを実行して」等と依頼する
+ollama pull <model名>                        # 未取得のモデルがあれば(人間が実行)
+claude --permission-mode auto                # リポジトリのルートディレクトリで起動
 ```
 
-> **`auto mode`で実行してください。** `bin/`配下のスクリプトは`ollama serve`で
+`--permission-mode auto`が`auto mode`の指定です。起動後に切り替えたい場合は、
+セッション内で`Shift+Tab`を押すとモードが順に切り替わり、`auto`を選べます。
+`.claude/settings.json`の`permissions.defaultMode`では指定できません
+(後述)。
+
+### セッション内で依頼する内容
+
+**モデル名を挙げなければ既定の3モデル全部**(`gemma4:26b`・`qwen3-coder:30b`・
+`qwen3.8:27b`)が対象になります。軸1・2では4段階のコンテキスト長も全部試すため、
+12通りの測定になり、軸3・4を含めると数時間かかります。**対象を絞る場合は
+モデル名を明示してください。**
+
+| 依頼したいこと | セッションに入力する内容 |
+|---|---|
+| 3モデル全部を比較する(既定) | `benchmark-run Skillでベンチマークを実行して` |
+| 特定の1モデルだけ測る | `benchmark-run Skillで gemma4:26b だけベンチマークを実行して` |
+| 特定の複数モデルを比較する | `benchmark-run Skillで gemma4:26b と qwen3-coder:30b だけベンチマークを実行して` |
+| コンテキスト長も絞る | `benchmark-run Skillで gemma4:26b だけ、コンテキスト長は 131072 と 262144 だけでベンチマークを実行して` |
+| 新しく追加したモデルを既存の結果と比べる | `benchmark-run Skillで <新モデル名> だけベンチマークを実行して。レポートは既存の reports/ の結果と比較する形にして` |
+
+モデル名は`ollama list`に出る表記(タグ込み。例: `gemma4:26b`)をそのまま書いて
+ください。表記が違うと`prepare.sh`が未取得と判定して停止します。
+
+> **`auto mode`が必要な理由。** `bin/`配下のスクリプトは`ollama serve`で
 > ポートをbind(listen)しますが、**サンドボックスはbindを拒否します**
 > (`Error: listen tcp 127.0.0.1:11434: bind: operation not permitted`)。
 > `sandbox.network.allowedDomains`で許可しても解決しません
@@ -95,6 +117,11 @@ claude                  # リポジトリのルートディレクトリで起動
 > **測定される側(`fixture/`)は`auto mode`の影響を受けません。** あちらは
 > `allowUnsandboxedCommands: false`でサンドボックスを外す経路自体が無く、
 > 外部通信も`ollama`の実行もできません。
+>
+> **リポジトリ側の設定で`auto mode`を既定にすることはできません。**
+> `permissions.defaultMode: "auto"`はプロジェクトスコープの設定では付与できず、
+> 無視された上でユーザー設定のモードを覆い隠してしまいます。そのため
+> `.claude/settings.json`には書かず、起動時に毎回指定します。
 
 `benchmark-run` Skillは内部で以下を順に実行します(詳細は
 `.claude/skills/benchmark-run/SKILL.md`を参照)。

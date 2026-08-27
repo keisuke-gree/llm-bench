@@ -30,7 +30,8 @@
 #   人間が通常のターミナルから直接実行するか、リポジトリのルートで起動した
 #   Claude Codeのセッションから `benchmark-run` Skill経由で実行する。
 #
-# 注意: Claude Codeのセッションから実行する場合、`auto mode` が必要になる。
+# 注意: Claude Codeのセッションから実行する場合、`auto mode`(起動時に
+#      `claude --permission-mode auto`、またはセッション内で Shift+Tab)が必要になる。
 #      このスクリプトは `ollama serve` でポートをbind(listen)するが、
 #      サンドボックスがbindを拒否するため(`bind: operation not permitted`)、
 #      サンドボックス外での実行が必要になる。`sandbox.network.allowedDomains` は
