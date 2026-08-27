@@ -164,6 +164,36 @@ llm-bench/
 `CLAUDE.md`が**1件だけ**（`fixture/CLAUDE.md`のみ）計上されていることで確認できます。
 `~/.claude/CLAUDE.md`が併記されている場合は除外できていません。
 
+### Skillを追加したら `skillOverrides` にも追加すること
+
+**プロジェクトスコープのSkillは、起動ディレクトリからリポジトリルートまで遡って探索されます**
+（公式に文書化された仕様）。`settings.json`や`CLAUDE.md`がカレントディレクトリ基準で解決される
+のとは異なるため、`fixture/`で起動しても`llm-bench/.claude/skills/`のSkillが読み込まれます。
+
+これは重大な問題を起こします。Skillの説明文には「正解セットと突き合わせて採点する」といった
+記述があるため、**測定対象のモデルに「自分はベンチマークを受けている」「正解セットが存在する」
+ことが漏れます**。正解を読まれれば測定は無意味になります。
+
+そのため`fixture/.claude/settings.json`で個別に無効化しています。
+
+```json
+"skillOverrides": {
+  "benchmark-score": "off",
+  "benchmark-report": "off"
+}
+```
+
+**`.claude/skills/`にSkillを追加したら、必ずここにも`"off"`で追加してください。**
+忘れると同じ漏れが再発します。
+
+`--bare`や`--disable-slash-commands`でも止まりますが、**Built-inのSkillまで消えてしまい
+測定条件が変わる**ため使いません。過去の測定はBuilt-in Skillが読み込まれた状態で行われています。
+
+確認方法は`fixture/`で`/context`を実行し、`Skills`に`Project`セクションが**現れないこと**です。
+
+なお防御を1つに頼らないため、`permissions.deny`でも`answers/`・`tasks/`・`results/`・
+`reports/`・`bin/`・`docs/`・`*.tsv`への`Read`を塞いでいます。
+
 ## フィクスチャを公開しないこと
 
 `fixture/`の合成コードと`answers/`の正解セットが公開範囲に出ると、いずれモデルの

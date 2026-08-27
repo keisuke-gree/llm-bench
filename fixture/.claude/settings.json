@@ -10,6 +10,10 @@
   "claudeMdExcludes": [
     "**/.claude/CLAUDE.md"
   ],
+  "skillOverrides": {
+    "benchmark-score": "off",
+    "benchmark-report": "off"
+  },
   "sandbox": {
     "enabled": true,
     "failIfUnavailable": true,
@@ -48,6 +52,14 @@
       "Bash(ollama run *)"
     ],
     "deny": [
+      "Read(**/answers/**)",
+      "Read(**/answers.md)",
+      "Read(**/tasks/**)",
+      "Read(**/results/**)",
+      "Read(**/reports/**)",
+      "Read(**/*.tsv)",
+      "Read(**/bin/**)",
+      "Read(**/docs/**)",
       "mcp__*",
       "WebSearch",
       "WebFetch",
