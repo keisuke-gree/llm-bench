@@ -1,0 +1,86 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "ollama",
+    "ANTHROPIC_BASE_URL": "http://localhost:11434",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL": "1",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "131072",
+    "CLAUDE_CODE_AUTO_COMPACT_WINDOW": "115000"
+  },
+  "claudeMdExcludes": [
+    "~/.claude/CLAUDE.md"
+  ],
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": [
+        "~/.ssh",
+        "~/.gnupg"
+      ],
+      "denyWrite": [
+        "~/.claude/settings.json",
+        "~/.ssh",
+        "~/.gnupg"
+      ]
+    }
+  },
+  "model": "qwen3-coder:30b",
+  "disableAllHooks": false,
+  "disableClaudeAiConnectors": true,
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(composer install)",
+      "Bash(composer show *)",
+      "Bash(vendor/bin/phpcs *)",
+      "Bash(vendor/bin/phpstan *)",
+      "Bash(vendor/bin/phpunit *)",
+      "Bash(docker-compose -f tools/ci/docker-compose.yml up *)",
+      "Bash(docker-compose -f tools/ci/docker-compose.yml down)",
+      "Bash(ollama ps)",
+      "Bash(ollama run *)"
+    ],
+    "deny": [
+      "mcp__*",
+      "WebSearch",
+      "WebFetch",
+      "Bash(sudo *)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(nc *)",
+      "Bash(netcat *)",
+      "Bash(ssh *)",
+      "Bash(scp *)",
+      "Bash(rsync *)",
+      "Bash(ftp *)",
+      "Bash(sftp *)",
+      "Bash(claude --dangerously-skip-permissions*)",
+      "Bash(rm *)",
+      "Bash(git push * main*)",
+      "Bash(git push * master*)",
+      "Bash(git push * develop*)",
+      "Bash(git push *--force*)",
+      "Bash(git push *-f *)",
+      "Bash(git push *-f)",
+      "Read(.env*)",
+      "Read(.ssh/*)",
+      "Read(id_rsa)",
+      "Read(id_ed25519)",
+      "Read(id_ecdsa)",
+      "Read(*.pem)",
+      "Read(*.key)",
+      "Read(*.p12)",
+      "Read(*.pfx)",
+      "Read(*.cert)",
+      "Read(*.cer)",
+      "Edit(.env*)"
+    ]
+  }
+}

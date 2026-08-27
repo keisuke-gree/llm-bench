@@ -1,0 +1,21 @@
+{
+    "name": "bench/quest-reward-system",
+    "description": "クエスト報酬システム",
+    "type": "project",
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Bench\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Bench\\Tests\\": "tests/"
+        }
+    }
+}

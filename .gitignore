@@ -1,0 +1,19 @@
+# ローカルでの測定結果・回答ファイル・対応表(環境固有のため共有しない)
+results/*
+!results/.gitkeep
+
+# スクリプトが作成するバックアップ
+*.bak.*
+
+# 起動中サーバーのPIDファイル
+.ollama.pid
+
+# Phpactor等が生成するインデックス
+.phpactor/
+.phpactor.json
+
+# PHPの依存(フィクスチャは依存解決を必要としない)
+vendor/
+
+# macOS
+.DS_Store
