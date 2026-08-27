@@ -1,0 +1,638 @@
+<title>ローカルLLMモデル選定レポート</title>
+<style>
+  :root {
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #6b6b6b;
+    --border: #e0e0e0;
+    --accent: #1a5fb4;
+    --win-bg: #e8f5e9;
+    --win-fg: #1b5e20;
+    --lose-bg: #fdecea;
+    --lose-fg: #8b1a10;
+    --warn-bg: #fff8e1;
+    --warn-fg: #7a5300;
+    --code-bg: #f5f5f5;
+    --th-bg: #f0f0f0;
+    --tip-bg: #2b2b2b;
+    --tip-fg: #ffffff;
+    --tip-border: #2b2b2b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14161a;
+      --fg: #e6e6e6;
+      --muted: #9aa0a6;
+      --border: #2c3038;
+      --accent: #78aeff;
+      --win-bg: #1b3a22;
+      --win-fg: #a5e0b0;
+      --lose-bg: #3d1f1c;
+      --lose-fg: #f0a99f;
+      --warn-bg: #3a2f14;
+      --warn-fg: #e8cf8f;
+      --code-bg: #1c1f25;
+      --th-bg: #1f232a;
+      --tip-bg: #e6e6e6;
+      --tip-fg: #14161a;
+      --tip-border: #e6e6e6;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14161a;
+    --fg: #e6e6e6;
+    --muted: #9aa0a6;
+    --border: #2c3038;
+    --accent: #78aeff;
+    --win-bg: #1b3a22;
+    --win-fg: #a5e0b0;
+    --lose-bg: #3d1f1c;
+    --lose-fg: #f0a99f;
+    --warn-bg: #3a2f14;
+    --warn-fg: #e8cf8f;
+    --code-bg: #1c1f25;
+    --th-bg: #1f232a;
+    --tip-bg: #e6e6e6;
+    --tip-fg: #14161a;
+    --tip-border: #e6e6e6;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+    line-height: 1.75;
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 5rem;
+    font-size: 15px;
+  }
+  h1 { font-size: 1.8rem; margin: 0 0 .3rem; letter-spacing: -.01em; }
+  h2 {
+    font-size: 1.25rem;
+    margin: 3rem 0 1rem;
+    padding-bottom: .4rem;
+    border-bottom: 2px solid var(--border);
+  }
+  h3 { font-size: 1.05rem; margin: 2rem 0 .6rem; }
+  .meta { color: var(--muted); font-size: .85rem; margin-bottom: 2.5rem; }
+  p { margin: .8rem 0; }
+
+  .verdict {
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    background: var(--code-bg);
+    padding: 1.2rem 1.4rem;
+    border-radius: 6px;
+    margin: 1.5rem 0;
+  }
+  .verdict h2 { margin: 0 0 .6rem; border: none; padding: 0; font-size: 1.15rem; }
+  .verdict strong { color: var(--accent); }
+
+  .scroll { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: .88rem; }
+  th, td {
+    border: 1px solid var(--border);
+    padding: .5rem .7rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--th-bg); font-weight: 600; white-space: nowrap; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .win { background: var(--win-bg); color: var(--win-fg); font-weight: 600; }
+  .lose { background: var(--lose-bg); color: var(--lose-fg); }
+  .warn { background: var(--warn-bg); color: var(--warn-fg); }
+  caption { caption-side: bottom; color: var(--muted); font-size: .8rem; padding-top: .5rem; text-align: left; }
+
+  code {
+    background: var(--code-bg);
+    padding: .12em .4em;
+    border-radius: 3px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .88em;
+  }
+  pre {
+    background: var(--code-bg);
+    padding: .9rem 1rem;
+    border-radius: 6px;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  pre code { background: none; padding: 0; }
+
+  ul, ol { padding-left: 1.4rem; }
+  li { margin: .35rem 0; }
+  .note { color: var(--muted); font-size: .88rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* 用語ツールチップ（本文中の用語向け。表セルはtitle属性を使うためここでは対象外） */
+  .t {
+    border-bottom: 1px dotted var(--muted);
+    cursor: help;
+    position: relative;
+  }
+  .t:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  .t::after {
+    content: attr(data-tip);
+    position: absolute;
+    left: 50%;
+    bottom: 125%;
+    transform: translate(-50%, -4px);
+    width: max-content;
+    max-width: 320px;
+    background: var(--tip-bg);
+    color: var(--tip-fg);
+    border: 1px solid var(--tip-border);
+    padding: .55rem .75rem;
+    border-radius: 6px;
+    font-size: .82rem;
+    line-height: 1.5;
+    white-space: normal;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .12s ease;
+    z-index: 20;
+    pointer-events: none;
+  }
+  .t:hover::after,
+  .t:focus::after {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .8rem 1.2rem;
+    margin: 1.5rem 0;
+  }
+  details summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+  details dl { margin: 1rem 0 .2rem; }
+  details dt { font-weight: 600; margin-top: .9rem; }
+  details dt:first-child { margin-top: 0; }
+  details dd { margin: .2rem 0 0; color: var(--fg); }
+</style>
+
+<h1>ローカルLLMモデル選定レポート</h1>
+<p class="meta">
+  対象: <code>gemma4:26b</code> / <code>qwen3-coder:30b</code> / <code>qwen3.8:27b</code><br>
+  測定日: 2026-08-26 〜 2026-08-27 ／ 環境: Apple M5 Max (<span class="t" data-tip="GPUが使えるメモリ。Apple Siliconでは本体メモリと共有され、この環境では実測28.1 GiBが上限。" tabindex="0">VRAM</span>実測 28.1 GiB) + Ollama + Claude Code
+</p>
+
+<div class="verdict">
+  <h2>結論</h2>
+  <p><strong>本番モデルを <code>gemma4:26b</code> に変更することを推奨する。</strong></p>
+  <p>
+    最高精度（軸4: 14/15）と最高の調査過程品質（軸3: 15/15）を、実用的な速度で達成した唯一のモデル。
+    3タスク合計の所要時間は現行の <code>qwen3-coder:30b</code> の <strong>1.39倍にとどまり</strong>、
+    <strong>最も難しいタスク2では逆に高速だった</strong>（1分35秒 対 1分54秒）。
+    加えて<span class="t" data-tip="モデルが一度に扱える入力と出力の合計トークン数の上限。これを超えると古い内容が失われる。" tabindex="0">コンテキスト長</span>が2倍（262144）、VRAM消費が8GB少ない（17GB）。
+  </p>
+  <p>
+    <code>qwen3.8:27b</code> は精度で <code>gemma4:26b</code> と完全に同点だが、所要時間が
+    <strong>10.2倍</strong>（48分14秒 対 4分43秒）であり、厳密に劣位。
+  </p>
+</div>
+
+<details>
+  <summary>用語集（クリックで展開）</summary>
+  <dl>
+    <dt>eval rate</dt>
+    <dd>モデルが出力を生成する速度（1秒あたりのトークン数）。eval count ÷ eval duration で求まる。入力を読む速度とは別物で、体感速度を支配するのはこちら。</dd>
+    <dt>eval count</dt>
+    <dd>モデルが生成した出力のトークン数。実際の待ち時間は eval count ÷ eval rate で決まるため、速度だけ見ても待ち時間は分からない。</dd>
+    <dt>prompt eval rate</dt>
+    <dd>入力（プロンプト）を読み込む速度。全トークンを並列に処理できるため eval rate より速い。</dd>
+    <dt>トークン</dt>
+    <dd>モデルが文章を扱う最小単位。日本語なら1〜2文字、英語なら単語の一部程度に相当する。</dd>
+    <dt>tok/s</dt>
+    <dd>tokens per second。1秒あたりに生成できるトークン数。</dd>
+    <dt>コンテキスト長</dt>
+    <dd>モデルが一度に扱える入力と出力の合計トークン数の上限。これを超えると古い内容が失われる。</dd>
+    <dt>KVキャッシュ</dt>
+    <dd>生成の途中結果を保持するメモリ領域。コンテキストが長いほど大きくなり、VRAMを消費する。</dd>
+    <dt>VRAM</dt>
+    <dd>GPUが使えるメモリ。Apple Siliconでは本体メモリと共有され、この環境では実測28.1 GiBが上限。</dd>
+    <dt>PROCESSOR</dt>
+    <dd>ollama ps が表示する列で、モデルがGPUとCPUのどちらで動いているかの比率。100% GPU が理想的な状態。</dd>
+    <dt>SIZE</dt>
+    <dd>ollama ps が表示する列で、そのモデルがメモリ上で占める大きさ。モデルの重みとKVキャッシュの合計。</dd>
+    <dt>CPU溢れ</dt>
+    <dd>モデルがVRAMに収まらず一部がCPU側で処理されること。オフロードとも呼び、速度が激減する。</dd>
+    <dt>MoE</dt>
+    <dd>Mixture-of-Experts。モデル内部を複数の「専門家」に分け、1トークンごとに一部だけを使う構造。総パラメータが大きくても計算量が少なく高速。</dd>
+    <dt>dense</dt>
+    <dd>MoEと対になる構造で、1トークンごとに全パラメータを使う。同じサイズならMoEより遅くなる。</dd>
+    <dt>メモリ帯域</dt>
+    <dd>メモリからデータを読み出せる速さ（GB/s）。denseモデルの速度上限を決める物理的な制約。</dd>
+    <dt>量子化</dt>
+    <dd>モデルの重みを低い精度に圧縮してサイズを小さくする技術。Q4_K_M は約4bitに圧縮する代表的な方式。</dd>
+    <dt>thinkingモード</dt>
+    <dd>回答の前に思考過程を生成するモデルの動作。精度が上がることがあるが生成トークンが増えて時間がかかる。</dd>
+    <dt>auto-compact</dt>
+    <dd>会話がコンテキスト長の上限に近づいた際、Claude Codeが自動で要約して圧縮する機能。</dd>
+    <dt>型エラー</dt>
+    <dd>TypeError。宣言された型と異なる型の値を渡したときにPHPが発生させるエラー。</dd>
+    <dt>strict_types</dt>
+    <dd>PHPの厳格な型チェックモード。有効にすると型の自動変換を行わずエラーにする。</dd>
+    <dt>文字列補間</dt>
+    <dd>"文字列{$変数}" のように文字列の中に変数を埋め込む書き方。どんな型でも文字列に変換されるため型エラーにならない。</dd>
+    <dt>名前付き引数</dt>
+    <dd>campaignId: 101 のように引数名を明示して渡すPHPの書き方。単純な検索では見つけにくい。</dd>
+    <dt>位置引数</dt>
+    <dd>引数を順番だけで指定する従来の書き方。</dd>
+    <dt>レシーバ</dt>
+    <dd>$obj-&gt;method() の $obj の部分。どのクラスのメソッドが呼ばれるかは、この変数の型で決まる。</dd>
+    <dt>デコイ</dt>
+    <dd>ベンチマークで意図的に仕込んだ「正解に見えるが正解ではないもの」。判別能力を測るための罠。</dd>
+    <dt>幻覚</dt>
+    <dd>hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。</dd>
+    <dt>学習データ汚染</dt>
+    <dd>評価に使うコードがモデルの学習データに含まれており、実際には調査せず記憶で答えられてしまう問題。</dd>
+    <dt>rg</dt>
+    <dd>ripgrep。高速な文字列検索コマンド。</dd>
+    <dt>fd</dt>
+    <dd>高速なファイル探索コマンド。</dd>
+    <dt>テンプレートトークン</dt>
+    <dd>モデルが内部的に使う制御記号。出力に漏れると表示が壊れたり、ツール呼び出しが失敗する。</dd>
+    <dt>ArgumentCountError</dt>
+    <dd>必須の引数が渡されなかったときにPHPが発生させるエラー。</dd>
+    <dt>permissions.deny</dt>
+    <dd>Claude Codeの設定で、特定のツールやコマンドの使用を禁止する仕組み。</dd>
+    <dt>sandbox</dt>
+    <dd>Claude CodeがOSレベルで通信やファイルアクセスを制限する仕組み。</dd>
+  </dl>
+</details>
+
+<h2>1. 検証の設計</h2>
+
+<p>4つの軸で比較した。軸1・2はOllama単体で機械的に測定し、軸3・4は専用に作成した合成PHPコードベース（90ファイル、Controller→Model→Logic→Daoのレイヤード構造）上で調査タスクを解かせて採点した。</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>軸</th><th>測るもの</th><th>方法</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>軸1</strong> 生成速度</td><td>1秒あたりの生成トークン数</td><td><code>ollama run --verbose</code> の <code title="モデルが出力を生成する速度（1秒あたりのトークン数）。eval count ÷ eval duration で求まる。入力を読む速度とは別物で、体感速度を支配するのはこちら。">eval rate</code></td></tr>
+    <tr><td><strong>軸2</strong> 実用コンテキスト上限</td><td>100% GPUを維持できる最大コンテキスト長</td><td><code>ollama ps</code> の <code title="ollama ps が表示する列で、モデルがGPUとCPUのどちらで動いているかの比率。100% GPU が理想的な状態。">PROCESSOR</code> 列</td></tr>
+    <tr><td><strong>軸3</strong> ツール呼び出し精度</td><td>調査の<em>過程</em>（ツール選択・幻覚・完結性）</td><td>3タスク × 5点満点</td></tr>
+    <tr><td><strong>軸4</strong> コード調査の精度</td><td>最終的な<em>結論</em>の正しさ</td><td>正解セットとの一致度、3タスク × 5点満点</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>合成コードベースを使った理由は、有名OSSでは<strong><span class="t" data-tip="評価に使うコードがモデルの学習データに含まれており、実際には調査せず記憶で答えられてしまう問題。" tabindex="0">学習データ汚染</span></strong>により「調査能力ではなく暗記量」を測ってしまうため。また合成なら正解が設計時点で確定し、<span class="t" data-tip="ベンチマークで意図的に仕込んだ「正解に見えるが正解ではないもの」。判別能力を測るための罠。" tabindex="0">デコイ</span>（同名メソッドを持つ別クラス、<span class="t" data-tip="&quot;文字列{$変数}&quot; のように文字列の中に変数を埋め込む書き方。どんな型でも文字列に変換されるため型エラーにならない。" tabindex="0">文字列補間</span>のみの参照など）を仕込んで難易度を制御できる。</p>
+
+<h3>タスクの内容</h3>
+<ol>
+  <li><strong>呼び出し元の列挙</strong> — 指定メソッドの呼び出し箇所をすべて特定（正解6件、デコイ7件）</li>
+  <li><strong>型変更の影響範囲</strong> — プロパティの型を <code>?int</code> → <code>string</code> に変えた場合に壊れるファイルを特定（正解7件、デコイ4件、対象外1件）</li>
+  <li><strong>テスト失敗の原因特定</strong> — 4段の呼び出し連鎖を辿って根本原因を特定</li>
+</ol>
+
+<h2>2. 軸3・4: 精度と過程（最重要）</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr>
+      <th>タスク</th>
+      <th colspan="2"><code>qwen3-coder:30b</code></th>
+      <th colspan="2"><code>gemma4:26b</code></th>
+      <th colspan="2"><code>qwen3.8:27b</code></th>
+    </tr>
+    <tr>
+      <th></th>
+      <th>軸3</th><th>軸4</th>
+      <th>軸3</th><th>軸4</th>
+      <th>軸3</th><th>軸4</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>1. 呼び出し元の列挙</td>
+      <td class="num lose">3/5</td><td class="num">5/5</td>
+      <td class="num win">5/5</td><td class="num">5/5</td>
+      <td class="num win">5/5</td><td class="num">5/5</td></tr>
+    <tr><td>2. 型変更の影響範囲</td>
+      <td class="num lose">3/5</td><td class="num lose">2/5</td>
+      <td class="num win">5/5</td><td class="num">4/5</td>
+      <td class="num win">5/5</td><td class="num">4/5</td></tr>
+    <tr><td>3. テスト失敗の原因特定</td>
+      <td class="num">5/5</td><td class="num">5/5</td>
+      <td class="num">5/5</td><td class="num">5/5</td>
+      <td class="num">5/5</td><td class="num">5/5</td></tr>
+    <tr>
+      <td><strong>合計</strong></td>
+      <td class="num lose"><strong>11/15</strong></td><td class="num lose"><strong>12/15</strong></td>
+      <td class="num win"><strong>15/15</strong></td><td class="num win"><strong>14/15</strong></td>
+      <td class="num win"><strong>15/15</strong></td><td class="num win"><strong>14/15</strong></td>
+    </tr>
+  </tbody>
+  <caption>軸3 = 調査の過程（ツール選択2点 / 構文エラーなし1点 / <span title="hallucination。モデルが存在しないファイルや関数を、あたかも存在するかのように出力すること。">幻覚</span>なし1点 / 完結性1点）、軸4 = 最終回答と正解セットの一致度</caption>
+</table>
+</div>
+
+<h3>タスク2で決定的な差がついた</h3>
+
+<p>タスク2は<code>campaignId</code>を含む12ファイルを1件ずつ判定する問題で、ここだけで優劣が分かれた。</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>モデル</th><th class="num">正解（7件中）</th><th class="num">見落とし</th><th class="num">誤検出</th><th>誤検出の内容</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>qwen3-coder:30b</code></td>
+      <td class="num lose">4</td><td class="num lose">3</td><td class="num lose">3</td>
+      <td><span title="&quot;文字列{$変数}&quot; のように文字列の中に変数を埋め込む書き方。どんな型でも文字列に変換されるため型エラーにならない。">文字列補間</span>のみの参照2件を「<span title="TypeError。宣言された型と異なる型の値を渡したときにPHPが発生させるエラー。">型エラー</span>になる<em>可能性があります</em>」と推測で誤検出、宣言箇所と呼び出し箇所の混同1件</td>
+    </tr>
+    <tr>
+      <td><code>gemma4:26b</code></td>
+      <td class="num win">7</td><td class="num win">0</td><td class="num">1</td>
+      <td>宣言箇所と呼び出し箇所の混同1件（<code>CampaignEntryModel</code>）</td>
+    </tr>
+    <tr>
+      <td><code>qwen3.8:27b</code></td>
+      <td class="num win">7</td><td class="num win">0</td><td class="num">2</td>
+      <td>変更対象そのもの1件、デフォルト値の扱いに依存する条件付き指摘1件（いずれも根拠付きの過剰検出）</td>
+    </tr>
+  </tbody>
+</table>
+</div>
+
+<p><code>qwen3-coder:30b</code> の見落としは<strong>検索手法の欠陥が直接の原因</strong>だった。<code class="t" data-tip="ripgrep。高速な文字列検索コマンド。" tabindex="0">rg</code> の結果を <code>| head -20</code> で打ち切っており、上限ちょうどに達していたため、切り捨てられた部分にあったテストファイル2件を落とした。さらに検索パターン <code>$context-&gt;campaignId</code> では<span class="t" data-tip="campaignId: 101 のように引数名を明示して渡すPHPの書き方。単純な検索では見つけにくい。" tabindex="0">名前付き引数</span>（<code>campaignId: 101</code>）にマッチしない。</p>
+
+<p><code>qwen3.8:27b</code> のみが <code>CampaignEntryModel</code> の「宣言箇所とエラー発生箇所の区別」を正しく処理した（他2モデルは誤検出）。</p>
+
+<h3>過程の質を分けた具体的な差</h3>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>観点</th><th><code>qwen3-coder:30b</code></th><th><code>gemma4:26b</code></th><th><code>qwen3.8:27b</code></th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>CLAUDE.md</code>の「<code title="ripgrep。高速な文字列検索コマンド。">rg</code>/<code title="高速なファイル探索コマンド。">fd</code>を使う」規則</td>
+      <td class="lose">無視。<code>find | xargs grep</code> を4回使用</td>
+      <td class="win"><code>rg</code>を使用</td>
+      <td class="win"><code>rg</code>と<code>fd</code>の両方を使用。規則を明示的に引用</td></tr>
+    <tr><td><code>head</code>による結果の切り捨て</td>
+      <td class="lose">あり。<strong>実際に誤答を招いた</strong></td>
+      <td class="win">なし。28箇所を1件ずつ全件判定</td>
+      <td class="win">なし</td></tr>
+    <tr><td>検索の網羅性</td>
+      <td class="lose">PHPプロジェクトで <code>*.cs</code>（C#）を3回検索し「クラスが存在しない」と誤結論</td>
+      <td>候補を全列挙して<span title="$obj->method() の $obj の部分。どのクラスのメソッドが呼ばれるかは、この変数の型で決まる。">レシーバ</span>の宣言型で判定</td>
+      <td class="win"><code>--no-ignore</code>・大文字小文字の変種・<span title="引数を順番だけで指定する従来の書き方。">位置引数</span>・snake_caseまで確認</td></tr>
+    <tr><td>不確実な場合の挙動</td>
+      <td class="lose">検証せず推測（「可能性があります」）</td>
+      <td class="win">コードを読んで根拠を明示</td>
+      <td class="win">根拠を明示。ただし判断に迷い堂々巡り</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>3. 所要時間</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>タスク</th><th class="num"><code>qwen3-coder:30b</code></th><th class="num"><code>gemma4:26b</code></th><th class="num"><code>qwen3.8:27b</code></th></tr>
+  </thead>
+  <tbody>
+    <tr><td>1. 呼び出し元の列挙</td><td class="num win">59秒</td><td class="num">1分45秒</td><td class="num lose">7分12秒</td></tr>
+    <tr><td>2. 型変更の影響範囲</td><td class="num">1分54秒</td><td class="num win">1分35秒</td><td class="num lose">32分11秒</td></tr>
+    <tr><td>3. テスト失敗の原因特定</td><td class="num win">31秒</td><td class="num">1分23秒</td><td class="num lose">8分51秒</td></tr>
+    <tr><td><strong>3タスク合計</strong></td><td class="num win"><strong>3分24秒</strong></td><td class="num"><strong>4分43秒</strong></td><td class="num lose"><strong>48分14秒</strong></td></tr>
+  </tbody>
+  <caption>各タスクで最速のモデルを緑で示す。<code>gemma4:26b</code> は最も難しいタスク2で最速だった</caption>
+</table>
+</div>
+
+<h3>速度の代償は想定より小さい</h3>
+
+<p><code>gemma4:26b</code> の合計所要時間は <code>qwen3-coder:30b</code> の <strong>1.39倍にとどまった</strong>。単体プロンプトでの待ち時間比較（29.3秒 対 10.2秒 = 2.9倍）から予測される値より大幅に小さい。</p>
+
+<p>さらに重要なのは、<strong>最も難しいタスク2では <code>gemma4:26b</code> の方が高速だった</strong>点である（1分35秒 対 1分54秒）。同時に精度は2倍（4/5 対 2/5）だった。<code>qwen3-coder:30b</code> は <code>find | xargs grep</code> による4回の空振り検索と、その後の個別ファイル読み込みに時間を費やしており、<strong>雑な調査は速度面でも報われていない</strong>。</p>
+
+<p class="note">これは「固定プロンプトでの生成トークン数は、エージェント用途の実所要時間を正確に予測しない」ことの実例でもある。コード生成タスクで冗長だった <code>gemma4:26b</code>（2229<span class="t" data-tip="モデルが文章を扱う最小単位。日本語なら1〜2文字、英語なら単語の一部程度に相当する。" tabindex="0">トークン</span>）は、調査タスクでは簡潔だった。</p>
+
+<h3><code>qwen3.8:27b</code> は厳密に劣位</h3>
+
+<p><code>gemma4:26b</code> と <code>qwen3.8:27b</code> は<strong>両軸で完全に同点</strong>（15/15、14/15）でありながら、所要時間は10.2倍の差がある。<code>qwen3.8:27b</code> の32分の大半は、調査そのものではなく「この項目を回答に含めるべきか」という判断の反復に費やされていた。</p>
+
+<h2>4. 軸1・2: 速度とコンテキスト上限</h2>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>モデル</th><th>32768</th><th>65536</th><th>131072</th><th>262144</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>gemma4:26b</code></td>
+      <td>100% GPU / 17GB / 79.4</td>
+      <td>100% GPU / 17GB / 73.9</td>
+      <td>100% GPU / 17GB / 75.5</td>
+      <td class="win">100% GPU / 17GB / 74.5</td>
+    </tr>
+    <tr>
+      <td><code>qwen3-coder:30b</code></td>
+      <td>100% GPU / 20GB / 94.6</td>
+      <td>100% GPU / 21GB / 95.0</td>
+      <td class="win">100% GPU / 25GB / 97.1</td>
+      <td class="lose">12% <span title="モデルがVRAMに収まらず一部がCPU側で処理されること。オフロードとも呼び、速度が激減する。">CPU溢れ</span> / 32GB / 9.4</td>
+    </tr>
+    <tr>
+      <td><code>qwen3.8:27b</code></td>
+      <td>100% GPU / 18GB / 26.4</td>
+      <td>100% GPU / 17GB / 25.7</td>
+      <td>100% GPU / 17GB / 25.1</td>
+      <td class="lose">14% CPU溢れ / 20GB / 19.1</td>
+    </tr>
+  </tbody>
+  <caption>各セル: <code>PROCESSOR</code> / <code title="ollama ps が表示する列で、そのモデルがメモリ上で占める大きさ。モデルの重みとKVキャッシュの合計。">SIZE</code> / tokens per second。CPUに溢れると速度が激減する（<code>qwen3-coder:30b</code> は97.1 → 9.4 tok/s と約10分の1）</caption>
+</table>
+</div>
+
+<p><strong><code>gemma4:26b</code> だけが262144でも100% GPUを維持し、速度も安定している。</strong> <span class="t" data-tip="生成の途中結果を保持するメモリ領域。コンテキストが長いほど大きくなり、VRAMを消費する。" tabindex="0">KVキャッシュ</span>効率が高く、コンテキスト長を8倍にしても<span class="t" data-tip="ollama ps が表示する列で、そのモデルがメモリ上で占める大きさ。モデルの重みとKVキャッシュの合計。" tabindex="0">SIZE</span>が17GBのまま変化しない。対して <code>qwen3-coder:30b</code> は20GB→32GBと12GB増加し、これが131072が上限になる理由。</p>
+
+<h3>実際の待ち時間（同一プロンプト、@131072）</h3>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>モデル</th><th class="num">eval rate</th><th class="num">生成トークン数</th><th class="num">実際の待ち時間</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>qwen3-coder:30b</code></td><td class="num">96.57 tok/s</td><td class="num">989</td><td class="num win">10.2秒</td></tr>
+    <tr><td><code>gemma4:26b</code></td><td class="num">76.07 tok/s</td><td class="num">2229</td><td class="num">29.3秒</td></tr>
+    <tr><td><code>qwen3.8:27b</code>（thinking OFF）</td><td class="num">31.41 tok/s</td><td class="num">1046</td><td class="num">33.3秒</td></tr>
+    <tr><td><code>qwen3.8:27b</code>（thinking ON = 既定）</td><td class="num">28.70 tok/s</td><td class="num">1617</td><td class="num lose">56.3秒</td></tr>
+  </tbody>
+  <caption>待ち時間 = 生成トークン数 ÷ eval rate。<strong>eval rate だけを見ると判断を誤る</strong>: <code>gemma4:26b</code> は速度差22%だが生成量が2.3倍のため、待ち時間は2.9倍になる</caption>
+</table>
+</div>
+
+<h2>5. 付随的に判明した技術的事実</h2>
+
+<h3>アーキテクチャの推定（メモリ帯域からの逆算）</h3>
+
+<p><span class="t" data-tip="MoEと対になる構造で、1トークンごとに全パラメータを使う。同じサイズならMoEより遅くなる。" tabindex="0">dense</span>モデルは1トークンごとに全重みを読むため、速度上限は「<span class="t" data-tip="メモリからデータを読み出せる速さ（GB/s）。denseモデルの速度上限を決める物理的な制約。" tabindex="0">メモリ帯域</span> ÷ モデルサイズ」で決まる。逆算すると各モデルが要求する帯域は以下になる。</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>モデル</th><th class="num">計算</th><th class="num">要求帯域</th><th>判定</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>qwen3.8:27b</code></td><td class="num">17GB × 26 tok/s</td><td class="num">約 442 GB/s</td><td>M5 Maxの実効帯域と整合 → <strong><span title="MoEと対になる構造で、1トークンごとに全パラメータを使う。同じサイズならMoEより遅くなる。">dense</span></strong></td></tr>
+    <tr><td><code>gemma4:26b</code></td><td class="num">17GB × 75 tok/s</td><td class="num">約 1,275 GB/s</td><td>物理的に不可能 → <strong><span title="Mixture-of-Experts。モデル内部を複数の「専門家」に分け、1トークンごとに一部だけを使う構造。総パラメータが大きくても計算量が少なく高速。">MoE</span>（疎）</strong></td></tr>
+    <tr><td><code>qwen3-coder:30b</code></td><td class="num">25GB × 97 tok/s</td><td class="num">約 2,425 GB/s</td><td>物理的に不可能 → <strong>MoE（疎）</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><code>qwen3.8:27b</code> が同サイズの <code>gemma4:26b</code> の3分の1の速度である理由はこれで説明できる。<strong>アーキテクチャ由来の構造的な差であり、設定では埋められない。</strong></p>
+
+<h3>thinkingモードの費用対効果</h3>
+
+<p><code>qwen3.8:27b</code> は<span class="t" data-tip="回答の前に思考過程を生成するモデルの動作。精度が上がることがあるが生成トークンが増えて時間がかかる。" tabindex="0">thinking</span>対応で、既定でONになっている。<code>ollama run --think=false</code> で無効化できるが、<strong>Claude Code経由では無効化する経路がない</strong>（Anthropic形式のリクエストにOllama独自の <code>think</code> フィールドを載せられない）。</p>
+
+<ul>
+  <li>thinkingをOFFにしても <code class="t" data-tip="モデルが出力を生成する速度（1秒あたりのトークン数）。eval count ÷ eval duration で求まる。入力を読む速度とは別物で、体感速度を支配するのはこちら。" tabindex="0">eval rate</code> はほぼ変わらない（28.70 → 31.41、+9.4%）。thinkingが変えるのは<strong>生成トークンの総量</strong>（1617 → 1046、−35%）</li>
+  <li>thinkingは <code>CampaignEntryModel</code> の判定を3モデル中唯一正解させるなど、過程の質には寄与した</li>
+  <li><strong>しかし最終スコアは <code>gemma4:26b</code> と同点</strong>。thinkingで得られる利点は、thinkingなしの規律ある調査で既に到達可能な水準だった</li>
+</ul>
+
+<p><strong>結論: ローカル環境でthinkingモデルを選ぶ理由は、現時点では見当たらない。</strong></p>
+
+<h3>テンプレートトークンの漏れ</h3>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>モデル</th><th>観測された漏れ</th><th>影響</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>qwen3-coder:30b</code></td><td><code>&lt;function=Bash&gt;</code> が平文で出力</td><td class="lose">ツール呼び出しが実行されず失敗</td></tr>
+    <tr><td><code>gemma4:26b</code></td><td><code>&lt;channel|&gt;</code> がテキストに混入</td><td class="warn">実害なし</td></tr>
+    <tr><td><code>qwen3.8:27b</code></td><td>なし</td><td class="win">—</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3><code>CLAUDE.md</code> のルールは守られない</h3>
+
+<p><code>CLAUDE.md</code> に「検索は <code>rg</code> に統一する。<code>grep</code> は使わない」と明記し、<code>/context</code> で確実に読み込まれていることを確認した状態で、<code>qwen3-coder:30b</code> は <code>find | xargs grep</code> を4回使用した。</p>
+
+<p><strong>この事実はセキュリティ運用にも影響する。</strong> 実効的な統制は文書ではなく技術層（<code class="t" data-tip="Claude Codeの設定で、特定のツールやコマンドの使用を禁止する仕組み。" tabindex="0">permissions.deny</code>、<code class="t" data-tip="Claude CodeがOSレベルで通信やファイルアクセスを制限する仕組み。" tabindex="0">sandbox</code> + <code>allowUnsandboxedCommands: false</code>）が担っていると認識すべきである。</p>
+
+<h2>6. ハードウェア投資は解決策になるか</h2>
+
+<p><strong>結論: 部分的にしか効かず、モデル間の差は縮まらない。</strong></p>
+
+<p><code>qwen3.8:27b</code> が10.2倍の時間を要したのは、<strong>まったく別の2つの原因が掛け算になった</strong>結果である。片方はハードウェアで改善するが、もう片方は一切改善しない。</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>原因</th><th>内容</th><th class="num">速度への寄与</th><th>ハードウェアで解決するか</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>アーキテクチャ</td>
+      <td>denseのため、1トークン生成するたびに全重み（17GB）をメモリから読み出す必要がある</td>
+      <td class="num">約3倍</td>
+      <td class="win">する（メモリ帯域に比例）</td>
+    </tr>
+    <tr>
+      <td>thinkingモード</td>
+      <td>同じ結論に至るまでに生成する文字数が3〜4倍になる</td>
+      <td class="num">約3.4倍</td>
+      <td class="lose">しない</td>
+    </tr>
+  </tbody>
+  <caption>3倍 × 3.4倍 ≒ 10倍。実測の10.2倍とほぼ一致する</caption>
+</table>
+</div>
+
+<h3>GPUを強化しても意味がない理由</h3>
+
+<p>実測から逆算すると <code>qwen3.8:27b</code> は <strong>17GB × 26 tok/s ≒ 442 GB/s</strong> のメモリ帯域を要求しており、M5 Maxの実効帯域（500〜600 GB/s程度）に<strong>すでに張り付いている</strong>。</p>
+
+<p>つまりボトルネックは<strong>演算性能ではなくデータ転送</strong>である。GPUは大半の時間、メモリからデータが届くのを待って遊んでいる状態にある。</p>
+
+<div class="scroll">
+<table>
+  <thead>
+    <tr><th>強化する対象</th><th>効果</th><th>理由</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>メモリ帯域</td><td class="win">直接効く</td><td>2倍にすればほぼ2倍速くなる。これがボトルネックそのもの</td></tr>
+    <tr><td>GPUコア数・演算性能</td><td class="lose">ほぼ無意味</td><td>GPUは待機しているだけなので、増やしても遊ぶコアが増えるだけ</td></tr>
+    <tr><td>メモリ容量（VRAM）</td><td class="warn">速度には無関係</td><td>より長いコンテキストが使えるようになるだけ</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="note">参考: データセンター向けGPU（H100は帯域約3.35 TB/s）であれば <code>qwen3.8:27b</code> は6倍前後、150 tok/s程度まで改善すると見込まれる。</p>
+
+<h3>それでもモデル間の差は縮まらない</h3>
+
+<p>ここが投資判断の分岐点である。<strong>メモリ帯域を上げると <code>gemma4:26b</code> も同じように速くなる。</strong> 両方が持ち上がるだけなので、10.2倍という<strong>比率は保たれる</strong>。</p>
+
+<p>さらに原因2（thinkingによる生成量の増加）は<strong>どんなハードウェアでも解決しない</strong>。ハードを速くすれば1トークンあたりは速くなるが、「3倍の文字数を書く」という性質は変わらないからである。</p>
+
+<p>差を実際に縮める方法は3つしかない。</p>
+<ol>
+  <li><strong>thinkingを無効化する</strong> — ただしClaude Code経由では技術的に不可能（Ollama独自の <code>think</code> パラメータを渡す経路がない）</li>
+  <li><strong>MoE構造のthinkingモデルを選ぶ</strong> — つまり別のモデルに乗り換える</li>
+  <li><strong>10倍の待ち時間を受け入れる</strong></li>
+</ol>
+
+<h3>モデルの品質と速度は独立した軸である</h3>
+
+<p>「新しく高性能なモデルなのだから、速度も同等以上のはず」という直感は成り立たない。</p>
+
+<p><code>qwen3.8:27b</code> は実際に優れた面を持つ。3モデル中唯一テンプレートトークンの漏れがなく、<code>fd</code> や <code>--no-ignore</code> まで使う調査の徹底性も最高で、<code>CampaignEntryModel</code> の微妙な判定も唯一正解した。<strong>1トークンあたりの品質は確かに高い。</strong></p>
+
+<p>しかし<strong>品質を上げるための設計選択が、そのまま速度を犠牲にする要因になっている</strong>。</p>
+
+<ul>
+  <li>dense構造を選べば1トークンあたりの計算量が増える（品質は上がりやすいが遅くなる）</li>
+  <li>thinkingを搭載すれば生成量が増える（精度は上がりやすいが遅くなる）</li>
+</ul>
+
+<p>今回の結論は、<strong>その犠牲に見合う品質向上が得られなかった</strong>ということである。<code>gemma4:26b</code> が軸3で15/15、軸4で14/15という満点近くを取ってしまったため、thinkingで伸ばせる余地がほとんど残っていなかった。</p>
+
+<h2>7. この検証の限界</h2>
+
+<ul>
+  <li><strong>合成コードは実プロダクトの癖を再現できない。</strong> 命名の不統一、歴史的経緯によるデッドコード、カスタムフレームワーク固有の書き方などは含まれない。順位が実コードでも成立するかは、運用中の観察で確認すべき</li>
+  <li><strong>規模が実コードより小さい。</strong> 90ファイルでは、ファイル数がさらに増えたときに <code>gemma4:26b</code> でも検索が崩れる可能性は排除できない</li>
+  <li>本番環境で使われている <code>.claude/rules/</code> のpath-scopedなルール（PHPファイル操作時に自動読み込みされ、アーキテクチャ原則などを与える）を再現していないため、実環境より与えられる文脈が少ない</li>
+  <li>各タスクは原則1回のみの実施。ローカルLLMの出力揺れは考慮していない</li>
+  <li>軸1・2の生データファイル <code>benchmark-results-20260826-164643.md</code> は解析バグ修正前に生成されたため、表示が <code>GB 100% GPU / 5571076f3d70 17</code> のように崩れている（<code>ollama ps</code> の <code>ID</code> 列を考慮していなかったことが原因）。<strong>数値自体は正しく、本レポートの値は原本と照合済み</strong></li>
+</ul>
+
+<hr>
+
+<h2>推奨アクション</h2>
+
+<ol>
+  <li><strong>本番モデルを <code>gemma4:26b</code> に変更する</strong> — <code>./scripts/switch-ollama-model.sh gemma4:26b</code> で <code>~/.zshrc</code> の <code>OLLAMA_CONTEXT_LENGTH</code>、<code>settings.json</code> の <code>model</code> / <code>CLAUDE_CODE_MAX_CONTEXT_TOKENS</code> / <code>CLAUDE_CODE_AUTO_COMPACT_WINDOW</code> が自動で揃う</li>
+  <li><strong><code>CLAUDE.md</code> の記述を更新する</strong> — 「使用モデル: <code>qwen3-coder:30b</code>（コンテキスト長131072で運用中）」を <code>gemma4:26b</code>（262144）に変更</li>
+  <li><strong><code>OLLAMA_KEEP_ALIVE</code> を <code>5m</code> に戻す</strong> — 検証用に <code>30m</code> へ変更したまま</li>
+  <li><strong>Phpactor導入は保留のまま様子を見る</strong> — 当初の目的（symbol検索の弱さの補強）は <code>gemma4:26b</code> の採用でほぼ解消された。実コードでの運用中に検索の取りこぼしが観測されたら再開する</li>
+</ol>
