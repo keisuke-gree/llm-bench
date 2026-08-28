@@ -202,12 +202,13 @@ Skillは測定を始める前に回数を確認します。**
 `benchmark-run` Skillは内部で以下を順に実行します(詳細は
 `.claude/skills/benchmark-run/SKILL.md`を参照)。
 
-1. 対象モデルを確定する(依頼文にモデル名が無ければ既定の3モデル)
+1. 対象モデル・コンテキスト長・**軸3・4の実行回数**を確定し、依頼者に提示する
 2. `./bin/sweep.sh`で軸1・2(生成速度・実用的なコンテキスト上限)を自動測定する
 3. `./bin/hide-answers.sh --hide`で正解セットを物理的に退避する(**必須**。詳細は
    後述の「正解セットへのアクセス制御の実態」を参照)
 4. モデルごとに`./bin/prepare.sh <model> --force`でモデルを切り替え、
-   `./bin/run-tasks.sh`で軸3・4のタスクを無人実行する
+   `./bin/run-tasks.sh`で軸3・4のタスクを無人実行する(手順1で3回と決めた場合は
+   モデルごとに3回実行する)
 5. `./bin/hide-answers.sh --restore`で正解セットを復元する
 6. `benchmark-score` Skillの手順で採点する
 7. `benchmark-report` Skillの手順でレポートを生成する
