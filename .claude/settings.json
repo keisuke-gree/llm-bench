@@ -30,6 +30,9 @@
       "Glob"
     ],
     "deny": [
+      "mcp__*",
+      "WebSearch",
+      "WebFetch",
       "Bash(sudo *)",
       "Bash(rm *)",
       "Bash(git push *)",
