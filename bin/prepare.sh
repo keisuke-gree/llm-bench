@@ -269,6 +269,7 @@ do_prepare() {
   echo "=== [6/7] サーバー起動待ち ==="
   if ! wait_for_server_ready; then
     echo "エラー: サーバー起動がタイムアウトしました(ログ: ${SERVE_LOG})" >&2
+    diagnose_server_start_failure
     exit 1
   fi
   echo "  OK(応答可能になりました)"

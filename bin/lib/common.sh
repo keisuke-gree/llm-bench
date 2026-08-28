@@ -214,6 +214,31 @@ wait_for_server_ready() {
   return 1
 }
 
+# サーバー起動がタイムアウトした際に、原因の切り分け材料を標準エラーへ出す。
+#
+# is_server_running() は curl でlocalhostに接続して判定するため、localhost宛の通信が
+# 遮断された環境(auto modeでないClaude Codeのセッション等)では、サーバーが動いていても
+# 「停止中」と誤判定する。この状態では既存サーバーの事前チェックが素通りし、
+# 使用中のポートに起動しようとして「起動タイムアウト」という原因の分かりにくい
+# エラーになる。lsof はポートの使用状況を直接見るため、この誤判定の影響を受けない。
+diagnose_server_start_failure() {
+  local listeners
+  listeners="$(lsof -nP -iTCP:"${SERVER_PORT}" -sTCP:LISTEN -t 2>/dev/null || true)"
+
+  if [[ -n "${listeners}" ]]; then
+    echo "        ポート ${SERVER_PORT} は既に使用されています(PID: ${listeners})。" >&2
+    echo "        別の 'ollama serve' が動作中の可能性が高いです。停止してから再実行するか、" >&2
+    echo "        --force を付けて自動停止させてください。" >&2
+    echo "        (このスクリプトはサーバーの起動確認に localhost への接続を使うため、" >&2
+    echo "         localhost が遮断された環境では動作中のサーバーを検出できません。" >&2
+    echo "         Claude Code から実行している場合は auto mode で起動しているか確認してください)" >&2
+  else
+    echo "        ポート ${SERVER_PORT} を待ち受けているプロセスはありません。" >&2
+    echo "        ログを確認してください(モデルのロードに時間がかかっている、" >&2
+    echo "        VRAM不足で失敗している等の可能性があります)。" >&2
+  fi
+}
+
 # サーバーが応答しなくなるまで待つ。タイムアウトしたら 1 を返す。
 wait_for_server_stopped() {
   local waited=0

@@ -159,6 +159,7 @@ start_server() {
   STARTED_BY_SCRIPT=1
   if ! wait_for_server_ready; then
     echo "エラー: コンテキスト長 ${ctx} でのサーバー起動がタイムアウトしました(ログ: ${logfile})" >&2
+    diagnose_server_start_failure
     return 1
   fi
   return 0
