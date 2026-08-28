@@ -24,3 +24,4 @@ YYYY-MM-DD-<内容のスラグ>.html
 | [`2026-08-27-initial-comparison.html`](./2026-08-27-initial-comparison.html) | 2026-08-26 〜 2026-08-27 | `gemma4:26b` / `qwen3-coder:30b` / `qwen3.8:27b` | `gemma4:26b`を推奨。精度(軸3・4)が最高で、所要時間の増加は現行比1.39倍にとどまる |
 | [`2026-08-27-gemma4-26b-rerun.html`](./2026-08-27-gemma4-26b-rerun.html) | 2026-08-27 | `gemma4:26b` | 前回のスコア(軸3 15/15・軸4 14/15)と所要時間(4分40秒)が再現。誤検出した1ファイルまで同一で、`CampaignEntryModel.php`型の誤検出は再現する弱点と判明 |
 | [`2026-08-27-gemma4-26b-benchmark.html`](./2026-08-27-gemma4-26b-benchmark.html) | 2026-08-27 | `gemma4:26b` | 3回目の測定でもスコア(軸3 15/15・軸4 14/15)と`CampaignEntryModel.php`誤検出が再現。今回初めてトレースファイルで軸3を直接評価し、誤検出は検索漏れでなくファイルを読了した上での判断ミスと確認 |
+| [`2026-08-28-gemma4-26b-variability.html`](./2026-08-28-gemma4-26b-variability.html) | 2026-08-28 | `gemma4:26b` | 4回目の測定でスコアが軸3 13/15・軸4 12/15まで低下し、過去3回の「完全再現」が崩れた。原因はタスク2で検索範囲を`src/`に自発的に限定し`tests/`配下の正解2件を見落としたこと。`CampaignEntryModel.php`誤検出は4回連続で再現 |
