@@ -21,7 +21,8 @@
 
 - macOS
 - [Ollama](https://ollama.com/)(評価対象のモデルは事前に`ollama pull <model名>`で
-  取得しておくこと)
+  取得しておくこと。取得を忘れていた場合、スクリプトが測定を1件も始めずに停止し、
+  必要な`ollama pull`コマンドを表示します)
 - Claude Code(`auto mode`で起動する必要があります。詳細は後述)
 - `jq` / `bash`(macOS標準の`/bin/bash` 3.2系で動作します)
 
@@ -143,7 +144,7 @@ claude --permission-mode auto                # リポジトリのルートディ
 | 新しく追加したモデルを既存の結果と比べる | `benchmark-run Skillで <新モデル名> だけベンチマークを実行して。レポートは既存の reports/ の結果と比較する形にして` |
 
 モデル名は`ollama list`に出る表記(タグ込み。例: `gemma4:26b`)をそのまま書いて
-ください。表記が違うと`prepare.sh`が未取得と判定して停止します。
+ください。表記が違うと未取得と判定され、測定を1件も始めずに停止します。
 
 > **`auto mode`が必要な理由。** `bin/`配下のスクリプトは`ollama serve`で
 > ポートをbind(listen)しますが、**サンドボックスはbindを拒否します**
@@ -445,13 +446,13 @@ Bash経由は`sandbox.filesystem.denyRead`でOSレベルに遮断しています
 
 | スクリプト | 説明 |
 |---|---|
-| `bin/prepare.sh` | モデル名の解決・存在確認・`fixture/.claude/settings.json`のパッチ・`ollama serve`の起動・ウォームアップと検証(100% GPUか等)までを1コマンドで行う |
+| `bin/prepare.sh` | モデル名の解決・取得済み確認(未取得なら停止)・`fixture/.claude/settings.json`のパッチ・`ollama serve`の起動・ウォームアップと検証(100% GPUか等)までを1コマンドで行う |
 | `bin/hide-answers.sh` | `answers/`をリポジトリ外の固定パスへ物理的に退避/復元する(`--hide` / `--restore` / `--status`) |
 | `bin/run-tasks.sh` | `fixture/`で現在のモデルにタスクを`claude -p --output-format stream-json --verbose`で無人実行させ、最終回答を`results/answers/`へ、ツール呼び出しを含む全イベントを`results/traces/`へ、それぞれブラインドIDのファイルとして自動保存する(退避されていなければエラーで停止する安全装置つき) |
 | `bin/record.sh` | 現在のモデルを`fixture/.claude/settings.json`から自動で読み取り、軸3・4の回答をランダムなブラインドIDのファイルとして払い出す |
 | `bin/score.sh` | 軸3・4のスコアをブラインドIDのまま`results/scores.tsv`に記録する(`results/mapping.tsv`は参照しない) |
 | `bin/restore.sh` | `bin/prepare.sh`が起動した`ollama serve`を停止し、検証環境を片付ける |
-| `bin/sweep.sh` | 軸1・2(生成速度・実用的なコンテキスト上限)を全モデル×全コンテキスト長で自動測定する |
+| `bin/sweep.sh` | 軸1・2(生成速度・実用的なコンテキスト上限)を全モデル×全コンテキスト長で自動測定する。開始前に全対象モデルの取得済み確認を行い、未取得なら停止する |
 | `bin/new-report.sh` | `reports/_template.html`から日付入りのレポートファイルを`reports/`配下に生成する |
 
 各スクリプトは`--help`で詳しい使い方を確認できます。`bin/prepare.sh`と`bin/sweep.sh`は
