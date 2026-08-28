@@ -123,6 +123,33 @@ ollama pull <model名>                        # 未取得のモデルがあれ�
 claude --permission-mode auto                # リポジトリのルートディレクトリで起動
 ```
 
+### `ollama serve` は起動しないでください
+
+**スクリプトが自分で起動します。** `bin/sweep.sh`と`bin/prepare.sh`が
+`OLLAMA_CONTEXT_LENGTH`を渡してサーバーを立ち上げ、測定が終われば止めます。
+素の`ollama serve`はこの環境変数を受け取らないため、手で起動すると意図しない
+コンテキスト長でモデルがロードされ、測定結果が比較できなくなります。
+
+**むしろ、既に動いている`ollama serve`は先に止めてください。**
+日常利用のために起動したままにしていると、`bin/sweep.sh`がエラーで停止します。
+
+```bash
+lsof -nP -iTCP:11434 -sTCP:LISTEN     # 動いているか確認する
+```
+
+出力があれば、そのターミナルで`Ctrl+C`して止めてから始めてください。
+
+### 終わったあと
+
+`bin/restore.sh`(工程の最後に自動で実行されます)がポート11434のサーバーを停止します。
+**日常利用のOllamaも一緒に止まる**ので、戻すには自分で起動し直してください。
+
+```bash
+source ~/.zshrc && ollama serve
+```
+
+`~/.zshrc`はこのベンチマークでは一切書き換えないため、復元作業は不要です。
+
 `--permission-mode auto`が`auto mode`の指定です。起動後に切り替えたい場合は、
 セッション内で`Shift+Tab`を押すとモードが順に切り替わり、`auto`を選べます。
 `.claude/settings.json`の`permissions.defaultMode`では指定できません
